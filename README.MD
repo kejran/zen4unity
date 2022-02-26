@@ -1,6 +1,6 @@
 # Gothic Importer for Unity (zen4unity)
 
-_(preview image here)_
+![preview](https://github.com/kejran/zen4unity/blob/master/preview.png?raw=true)
 
 __zen4unity__ is a tool for loading Piranha Bytes' __Gothic__ and __Gothic II__ game assets directly into Unity. 
 
@@ -10,19 +10,36 @@ The tool relies on [zenglue](https://github.com/kejran/zenglue/), which in turns
 
 ## Features
 
-- Static meshes
-- Materials and textures
-- World mesh
-- VOB hierarchy
-- Mesh prefab packing
+### Static meshes
+Load any static object as native unity mesh and store it as an asset. Any non-animated mesh can be loaded: 
+* Inventory items: swords, potions, rings, runes...
+* Furniture
+* Vegetation
+* Static interactables: beds, campfires...
+
+### World mesh
+Load entire level into a multi-material mesh asset. 
+
+### Materials and textures
+All textures that loaded meshes depend on will be automatically extracted. A generic user material is cloned into separate materials for all textures - this way the importer should work with any rendering pipeline.
+
+### Vobs
+[Virtual Objects](https://regoth-project.github.io/REGoth-bs/case-studies/object-kinds.html) define a basic type of entity present in ZenGin. For our purposes, there represent a hierarchy of objects placed in the world - that is all vegetation, furniture, interactables, lights, trigger or audio zones, et cetera. 
+
+All Vobs that contain children or have a defined visual are imported into Unity hierarchy during a level load.  
+
+### Prefabs
+All Vobs imported can be turned into prefabs. That way, after a level import a specific item can be given some additional functionality, and the change will be propagated through the whole level.
 
 ## TODO
+The following features are planned for the future:
 - Skinned meshes
 - Interactive meshes
 - Animations
 
 ## Not in scope
-- Daedalus VM
+### Daedalus
+Gothic runs it logic on a homebrew VM machine. Integration of it is not a goal, which means the importer cannot gather information about placed items, npcs, chest contents, dialogs, etc.  
 
 ## Usage
 * Open main window from main menu: [Gothic] -> [Open Importer]
