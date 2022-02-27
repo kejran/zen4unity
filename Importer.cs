@@ -16,6 +16,13 @@ public class Importer : IDisposable
     Zen? zen;
     string root;
 
+    private enum  PrefabType {
+        StaticMesh,
+        Skeleton,
+        SkinnedMesh,
+        DynamicMesh
+    }
+
     public Importer(string assetRoot = "") {
         root = assetRoot;
         vdfs = new VDFS();
@@ -137,8 +144,11 @@ public class Importer : IDisposable
 
     Material[] makeMaterials(MaterialMesh zmesh, MaterialLoadSettings settings)
     {
+        if (settings.loadTextures)
+            makeDir("Textures");
+        makeDir("Materials");
+
         var submeshes = zmesh.submeshCount();
-        Debug.Log(submeshes);
         var materials = new Material[submeshes];
 
         for (uint i = 0; i < submeshes; ++i)
@@ -239,11 +249,7 @@ public class Importer : IDisposable
         var rend = go.AddComponent<SkinnedMeshRenderer>();
         rend.bones = allBones;
 
-        makeDir("Rigs");
-        var prefab = PrefabUtility.SaveAsPrefabAsset(go, pathJoin(root, "Rigs", assetName + ".prefab"));
-        AssetDatabase.Refresh();
-        GameObject.DestroyImmediate(go);
-        return prefab;
+        return packageAsPrefab(go, "Rigs", assetName);
     }
 
     private GameObject importSkin(ZMeshLib lib, string skeleton, string assetName, MeshLoadSettings settings) 
@@ -261,19 +267,10 @@ public class Importer : IDisposable
             rend.sharedMesh = mesh;
 
             if (settings.loadMaterials)
-            {
-                if (settings.materialSettings.loadTextures)
-                    makeDir("Textures");
-                makeDir("Materials");
                 rend.materials = makeMaterials(zmesh, settings.materialSettings);
-            }
         }
 
-        makeDir("SkinnedPrefabs_");
-        var prefab = PrefabUtility.SaveAsPrefabAsset(go, pathJoin(root, "SkinnedPrefabs_", assetName + ".prefab"));
-        AssetDatabase.Refresh();
-        GameObject.DestroyImmediate(go);
-        return prefab;
+        return packageAsPrefab(go, "Prefabs/Skins", assetName);
     }
 
     private GameObject importMeshImplObj(ZMesh zmesh, MeshLoadSettings settings, string assetName)
@@ -291,25 +288,22 @@ public class Importer : IDisposable
         var mr = go.AddComponent<MeshRenderer>();
         
         if (settings.loadMaterials)
-        {
-            if (settings.materialSettings.loadTextures)
-                makeDir("Textures");
-            makeDir("Materials");
             mr.materials = makeMaterials(zmesh, settings.materialSettings);
-        }
+ 
         return go;
     }
 
-    private UnityEngine.Object packageAsPrefab(GameObject go, string path, string assetName)
+    private GameObject packageAsPrefab(GameObject go, string path, string assetName)
     {
         makeDir(path);
+        // todo use SaveAsPrefabAssetAndConnect instead
         var prefab = PrefabUtility.SaveAsPrefabAsset(go, pathJoin(root, path, assetName + ".prefab"));
         AssetDatabase.Refresh();
         GameObject.DestroyImmediate(go);
         return prefab;
     }
 
-    private UnityEngine.Object importMeshImpl(ZMesh zmesh, MeshLoadSettings settings, string assetName)
+    private GameObject importMeshImpl(ZMesh zmesh, MeshLoadSettings settings, string assetName)
     {
         var go = importMeshImplObj(zmesh, settings, assetName);
         return packageAsPrefab(go, "Models", assetName);
@@ -357,13 +351,6 @@ public class Importer : IDisposable
         return result.ToArray();
     }
 
-    private enum  PrefabType {
-        StaticMesh,
-        Skeleton,
-        SkinnedMesh,
-        DynamicMesh
-    }
-
     private GameObject getOrMakePrefab(string visual, string assetName, PrefabType type, MeshLoadSettings settings)
     {   
         var path = pathJoin(root, "Prefabs", assetName + ".prefab");
@@ -381,9 +368,8 @@ public class Importer : IDisposable
                 }
             }
 
-            if (false)//visual.EndsWith("MDL"))
+            if (visual.EndsWith("MDL-dummy-will-fix-later-stop-complaining-aboud-dead-code"))
             {
-                // Debug.Log(visual);
                 var go = new GameObject(assetName);
                 using (var lib = new ZMeshLib(vdfs, visual))
                 {
