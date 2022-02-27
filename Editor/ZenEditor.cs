@@ -8,7 +8,8 @@ public class ZenEditor : EditorWindow
     public enum LoadMode
     {
         World,
-        Model
+        Model,
+        Skeleton
     }
 
     public bool genUseMaterials = true;
@@ -145,6 +146,7 @@ public class ZenEditor : EditorWindow
         {
             LoadMode.Model => ".MRM",
             LoadMode.World => ".ZEN",
+            LoadMode.Skeleton => ".MDH",
             _ => ""
         };
         using (var imp = new Importer())
@@ -172,6 +174,8 @@ public class ZenEditor : EditorWindow
 
     void matView()
     {
+        if (genLoadMode != LoadMode.Model && genLoadMode != LoadMode.World)
+            return;
         if (!genUseMaterials) GUI.enabled = false;
         var label = new GUIContent("Materials", iconMaterial);
         matShow = EditorGUILayout.Foldout(matShow && genUseMaterials, label, true, EditorStyles.foldoutHeader);
@@ -304,6 +308,11 @@ public class ZenEditor : EditorWindow
         }
     }
 
+    void skeletonView() {
+        bool show = genLoadMode == LoadMode.Skeleton;
+        if (!show) return;
+    }
+
     void generalView()
     {
         var label = new GUIContent("General", iconImport);
@@ -357,6 +366,7 @@ public class ZenEditor : EditorWindow
             matView();
             worldView();
             meshView();
+            skeletonView();
         }
 
         EditorGUILayout.EndScrollView();
@@ -381,7 +391,10 @@ public class ZenEditor : EditorWindow
                 reloadAvailableFiles();
             EditorGUILayout.EndHorizontal();
 
-            if (bigButton(genLoadMode == LoadMode.World ? "Load World" : "Load Mesh"))
+            if (bigButton(
+                genLoadMode == LoadMode.World ? "Load World" : 
+                genLoadMode == LoadMode.Model ? "Load Mesh" : 
+                "Load Skeleton"))
                 runLoad();
             
             EditorGUILayout.EndVertical();
@@ -421,6 +434,9 @@ public class ZenEditor : EditorWindow
                     }
                 };
                 imp.ImportMesh(genFilteredFiles[genSelectedFileIndex], settings);
+            }
+            if (genLoadMode == LoadMode.Skeleton) {
+                imp.ImportSkeleton(genFilteredFiles[genSelectedFileIndex]);
             }
         }
     }

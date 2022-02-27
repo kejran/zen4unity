@@ -164,6 +164,56 @@ public class Importer : IDisposable
         return umesh;
     }
 
+    void setTransform(Transform t, Matrix4x4 mat) {
+        t.localPosition = new Vector3(mat.m03, mat.m13, mat.m23) * 0.01f;
+        t.localRotation = mat.rotation;
+        t.localScale = mat.lossyScale;
+    }
+
+    Transform[] iterNodes(Transform? parent, ZMeshLib.Node[] nodes) {
+        return nodes.Select(n => {
+            var go = new GameObject(n.name);
+            var t = go.transform;
+            if (parent != null)
+                t.parent = parent;
+            setTransform(t, n.transform);
+            iterNodes(t, n.children);
+            return t;
+        }).ToArray();
+    }
+
+    private Transform makeSkeleton(ZMeshLib lib) {
+        var nodes = lib.Nodes();
+        if (nodes.Length == 0)
+            throw new Exception("No root nodes found");
+        if (nodes.Length > 1) {
+            var s = "Expected 1 root node, got: [" + nodes[0].name;
+            foreach (var nn in nodes.Skip(1))
+                s += ", " + nn.name;
+            throw new Exception(s + "]");
+        } 
+        var res = iterNodes(null, nodes);
+        return res[0];
+    }
+
+    private UnityEngine.Object importSkeleton(ZMeshLib lib, string assetName) {
+        var path = Path.Combine(root, "Avatars", assetName + ".asset");
+        var rootBone = makeSkeleton(lib);
+        var go = rootBone.gameObject;
+        var avatar = AvatarBuilder.BuildGenericAvatar(go, "");
+        makeDir("Avatars");
+        AssetDatabase.CreateAsset(avatar, path);
+
+        var ani = go.AddComponent<Animator>();
+        ani.avatar = avatar;
+
+        makeDir("Rigs");
+        var prefab = PrefabUtility.SaveAsPrefabAsset(go, Path.Combine(root, "Rigs", assetName + ".prefab"));
+        AssetDatabase.Refresh();
+        GameObject.DestroyImmediate(go);
+        return PrefabUtility.InstantiatePrefab(prefab);
+    }
+
     private GameObject importMeshImplObj(ZMesh zmesh, MeshLoadSettings settings, string assetName)
     {
         var umesh = makeMesh(zmesh);
@@ -308,6 +358,11 @@ public class Importer : IDisposable
     {
         using (var zmesh = new ZMesh(vdfs, name))
             PrefabUtility.InstantiatePrefab(importMeshImpl(zmesh, settings, name));
+    }
+
+    public void ImportSkeleton(string name) {
+        using (var lib = new ZMeshLib(vdfs, name))
+            importSkeleton(lib, name);
     }
 
     public void Dispose()
