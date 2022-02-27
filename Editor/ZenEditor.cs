@@ -9,7 +9,8 @@ public class ZenEditor : EditorWindow
     {
         World,
         Model,
-        Skeleton
+        Skeleton,
+        Skin
     }
 
     public bool genUseMaterials = true;
@@ -147,12 +148,16 @@ public class ZenEditor : EditorWindow
             LoadMode.Model => ".MRM",
             LoadMode.World => ".ZEN",
             LoadMode.Skeleton => ".MDH",
+            LoadMode.Skin => ".MDM",
             _ => ""
         };
         using (var imp = new Importer())
         {
             imp.LoadArchives(vdfsPath, getSelectedArchives());
-            genAvailableFiles = imp.AllFiles().Where(x => x.Contains(filter)).ToArray();
+            if (genLoadMode == LoadMode.Skeleton || genLoadMode == LoadMode.Skin)
+                genAvailableFiles = imp.AllFiles().Where(x => x.Contains(filter) || x.Contains(".MDL")).ToArray();
+            else 
+                genAvailableFiles = imp.AllFiles().Where(x => x.Contains(filter)).ToArray();
         }
         reloadFilteredFiles();
     }
@@ -174,7 +179,7 @@ public class ZenEditor : EditorWindow
 
     void matView()
     {
-        if (genLoadMode != LoadMode.Model && genLoadMode != LoadMode.World)
+        if (genLoadMode == LoadMode.Skeleton)
             return;
         if (!genUseMaterials) GUI.enabled = false;
         var label = new GUIContent("Materials", iconMaterial);
@@ -351,6 +356,8 @@ public class ZenEditor : EditorWindow
         EditorGUILayout.EndHorizontal();
     }
 
+    string skinSkeletonFile_ = "";
+
     void OnGUI()
     {
         headerView();
@@ -385,16 +392,23 @@ public class ZenEditor : EditorWindow
                 reloadFilteredFiles();
             genFileFilterOld = genFileFilter;
 
+            if (genLoadMode == LoadMode.Skin)
+                skinSkeletonFile_ = EditorGUILayout.TextField("Skeleton file", skinSkeletonFile_).ToUpper();
+
             EditorGUILayout.BeginHorizontal();
             genSelectedFileIndex = EditorGUILayout.Popup("File to Import", genSelectedFileIndex, genFilteredFiles);
             if (GUILayout.Button(new GUIContent(iconRefresh), EditorStyles.miniButton, GUILayout.Width(30)))
                 reloadAvailableFiles();
             EditorGUILayout.EndHorizontal();
 
-            if (bigButton(
-                genLoadMode == LoadMode.World ? "Load World" : 
-                genLoadMode == LoadMode.Model ? "Load Mesh" : 
-                "Load Skeleton"))
+            if (bigButton(genLoadMode switch {
+                LoadMode.World => "Load World", 
+                LoadMode.Model => "Load Mesh", 
+                LoadMode.Skeleton => "Load Skeleton",
+                LoadMode.Skin => "Load Skin",
+                _ => ""
+                //LoadMode.SkeletonSkin => ""
+            }))
                 runLoad();
             
             EditorGUILayout.EndVertical();
@@ -404,39 +418,33 @@ public class ZenEditor : EditorWindow
     void runLoad()
     {
         if (genFilteredFiles.Length <= genSelectedFileIndex) return;
-        using (var imp = new Importer("Assets/Gothic/"))
+
+        var settings = new Importer.MeshLoadSettings() { 
+            loadMaterials = genUseMaterials,
+            materialSettings = new Importer.MaterialLoadSettings()
+            {
+                opaqueMaterialTemplate = matBaseOpaque,
+                transparentMaterialTemplate = matBaseTransparent,
+                loadTextures = matLoadTextures
+            }
+        };
+        
+        using (var imp = new Importer("Assets/Gothic"))
         {
             imp.LoadArchives(vdfsPath, getSelectedArchives());
             if (genLoadMode == LoadMode.World)
             {
                 imp.LoadWorld(genFilteredFiles[genSelectedFileIndex], genUseG2);
-                var settings = new Importer.MeshLoadSettings() { 
-                    loadMaterials = genUseMaterials,
-                    materialSettings = new Importer.MaterialLoadSettings()
-                    {
-                        opaqueMaterialTemplate = matBaseOpaque,
-                        transparentMaterialTemplate = matBaseTransparent,
-                        loadTextures = matLoadTextures
-                    }
-                };
                 imp.ImportWorldMesh(settings);
             }
             if (genLoadMode == LoadMode.Model)
-            {
-                var settings = new Importer.MeshLoadSettings()
-                {
-                    loadMaterials = genUseMaterials,
-                    materialSettings = new Importer.MaterialLoadSettings()
-                    {
-                        opaqueMaterialTemplate = matBaseOpaque,
-                        transparentMaterialTemplate = matBaseTransparent,
-                        loadTextures = matLoadTextures
-                    }
-                };
                 imp.ImportMesh(genFilteredFiles[genSelectedFileIndex], settings);
-            }
+            
             if (genLoadMode == LoadMode.Skeleton) {
                 imp.ImportSkeleton(genFilteredFiles[genSelectedFileIndex]);
+            }
+            if (genLoadMode == LoadMode.Skin) {
+                imp.ImportSkin(genFilteredFiles[genSelectedFileIndex], skinSkeletonFile_, settings);
             }
         }
     }

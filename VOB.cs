@@ -23,13 +23,13 @@ namespace ZenGlue
         private static extern IntPtr zg_vob_children(IntPtr vob);
 
         [DllImport("zenglue", CallingConvention = CallingConvention.Cdecl)]
-        private static extern ref ZMesh.float3 zg_vob_position(IntPtr vob);
+        private static extern ref float3 zg_vob_position(IntPtr vob);
 
         [DllImport("zenglue", CallingConvention = CallingConvention.Cdecl)]
-        private static extern ref ZMesh.mat3x3 zg_vob_rotation(IntPtr vob);
+        private static extern ref mat3x3 zg_vob_rotation(IntPtr vob);
 
         [DllImport("zenglue", CallingConvention = CallingConvention.Cdecl)]
-        private static extern ref ZMesh.mat4x4 zg_vob_transform(IntPtr vob);
+        private static extern ref mat4x4 zg_vob_transform(IntPtr vob);
 
         [DllImport("zenglue", CallingConvention = CallingConvention.Cdecl)]
         private static extern ref uint zg_vob_show(IntPtr vob);

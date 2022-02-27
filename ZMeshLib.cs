@@ -13,6 +13,7 @@ namespace ZenGlue
             public Node[] children;
             public Matrix4x4 transform;
             public string name;
+            public uint index;
         }
 
         [DllImport("zenglue", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
@@ -40,8 +41,12 @@ namespace ZenGlue
         private static extern uint zg_meshlib_node_parent_get(IntPtr lib, uint index);
 
         [DllImport("zenglue", CallingConvention = CallingConvention.Cdecl)]
-        private static extern ref ZMesh.mat4x4 zg_meshlib_node_transform_get(IntPtr lib, uint index);
+        private static extern ref mat4x4 zg_meshlib_node_transform_get(IntPtr lib, uint index);
 
+
+        [DllImport("zenglue", CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr zg_skinnedmesh_init(IntPtr lib);
+        
 
     private IntPtr handle;
 
@@ -63,7 +68,12 @@ namespace ZenGlue
             return result;
         }
 
-        public Node[] Nodes()
+        public struct NodeInfo {
+            public Node[] asArray;
+            public Node[] asTree;
+        }
+
+        public NodeInfo Nodes()
         {
             var count = zg_meshlib_node_count(handle);
             var allNodes = new Node[count];
@@ -74,6 +84,7 @@ namespace ZenGlue
             {
                 var node = new Node();
                 allNodes[i] = node;
+                node.index = i;
                 node.transform = zg_meshlib_node_transform_get(handle, i).toUnity();
                 var name_p = zg_meshlib_node_name_get(handle, i);
                 node.name = Marshal.PtrToStringAnsi(name_p);
@@ -93,7 +104,14 @@ namespace ZenGlue
                 if (parents[i] == 0xffff)
                     rootNodes.Add(allNodes[i]);
 
-            return rootNodes.ToArray();
+            var result = new NodeInfo();
+            result.asTree = rootNodes.ToArray();
+            result.asArray = allNodes;
+            return result;
+        }
+
+        public ZSkinnedMesh SkinnedMesh() {
+            return new ZSkinnedMesh(zg_skinnedmesh_init(handle));
         }
 
         public void Dispose()

@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
+//using System.IO;
 using System.Linq;
 
 using UnityEditor;
@@ -26,10 +26,14 @@ public class Importer : IDisposable
         return vdfs.Files();
     }
 
+    private string pathJoin(params string[] paths) {
+        return String.Join("/", paths);
+    } 
+
     public void LoadArchives(string basePath, string[] archives)
     {
         foreach (var f in archives)
-            vdfs.LoadArchive(Path.Combine(basePath, f));
+            vdfs.LoadArchive(pathJoin(basePath, f));
         
         vdfs.FinalizeLoad();
     }
@@ -55,7 +59,7 @@ public class Importer : IDisposable
 
     private void makeDir(string name)
     {
-        Directory.CreateDirectory(Path.Combine(root, name));
+        System.IO.Directory.CreateDirectory(pathJoin(root, name));
     }
 
     private T loadAsset<T>(string path) where T : UnityEngine.Object
@@ -65,7 +69,7 @@ public class Importer : IDisposable
 
     private Texture2D makeTexture(string name, string assetName)
     {
-        var path = Path.Combine(root, "Textures", assetName);
+        var path = pathJoin(root, "Textures", assetName);
         var asset = loadAsset<Texture2D>(path);
         if (asset != null) return asset;
 
@@ -104,7 +108,7 @@ public class Importer : IDisposable
             }
             else
                 texture = "UNNAMED";
-        var path = Path.Combine(root, "Materials", texture.Replace(".TGA", "") + ".mat");
+        var path = pathJoin(root, "Materials", texture.Replace(".TGA", "") + ".mat");
         var stored_mat = loadAsset<Material>(path);
         if (stored_mat != null) 
             return stored_mat;
@@ -131,9 +135,10 @@ public class Importer : IDisposable
         return mat;
     }
 
-    Material[] makeMaterials(ZMesh zmesh, MaterialLoadSettings settings)
+    Material[] makeMaterials(MaterialMesh zmesh, MaterialLoadSettings settings)
     {
         var submeshes = zmesh.submeshCount();
+        Debug.Log(submeshes);
         var materials = new Material[submeshes];
 
         for (uint i = 0; i < submeshes; ++i)
@@ -164,26 +169,48 @@ public class Importer : IDisposable
         return umesh;
     }
 
+    private Mesh makeSkinMesh(ZSkinnedMesh zmesh, Transform[] tPose)
+    {
+        var umesh = new Mesh();
+
+        umesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+        var weights = zmesh.boneWeights();
+        umesh.vertices = zmesh.bindPoseVertices(tPose, weights);
+        umesh.boneWeights = weights;
+        umesh.bindposes = tPose.Select(t => t.worldToLocalMatrix).ToArray();
+        umesh.normals = zmesh.vertexNormals();
+        umesh.uv = zmesh.vertexUVs();
+
+        var submeshes = zmesh.submeshCount();
+        umesh.subMeshCount = (int)submeshes;
+        for (uint i = 0; i < submeshes; ++i) 
+            umesh.SetTriangles(zmesh.submeshElements(i), (int)i);
+        return umesh;
+    }
+
     void setTransform(Transform t, Matrix4x4 mat) {
         t.localPosition = new Vector3(mat.m03, mat.m13, mat.m23) * 0.01f;
         t.localRotation = mat.rotation;
         t.localScale = mat.lossyScale;
     }
 
-    Transform[] iterNodes(Transform? parent, ZMeshLib.Node[] nodes) {
+    Transform[] iterNodes(Transform? parent, Transform[] all, ZMeshLib.Node[] nodes) {
         return nodes.Select(n => {
             var go = new GameObject(n.name);
             var t = go.transform;
             if (parent != null)
                 t.parent = parent;
             setTransform(t, n.transform);
-            iterNodes(t, n.children);
+            all[n.index] = t;
+            iterNodes(t, all, n.children);
             return t;
         }).ToArray();
     }
 
-    private Transform makeSkeleton(ZMeshLib lib) {
-        var nodes = lib.Nodes();
+    private Tuple<Transform, Transform[]> makeSkeleton(ZMeshLib lib) {
+        var nodeInfo = lib.Nodes();
+        var nodes = nodeInfo.asTree;
+        var arr = new Transform[nodeInfo.asArray.Length];
         if (nodes.Length == 0)
             throw new Exception("No root nodes found");
         if (nodes.Length > 1) {
@@ -192,13 +219,15 @@ public class Importer : IDisposable
                 s += ", " + nn.name;
             throw new Exception(s + "]");
         } 
-        var res = iterNodes(null, nodes);
-        return res[0];
+        var res = iterNodes(null, arr, nodes);
+        return Tuple.Create(res[0], arr);
     }
 
-    private UnityEngine.Object importSkeleton(ZMeshLib lib, string assetName) {
-        var path = Path.Combine(root, "Avatars", assetName + ".asset");
-        var rootBone = makeSkeleton(lib);
+    private GameObject importSkeleton(ZMeshLib lib, string assetName) 
+    {
+        var path = pathJoin(root, "Avatars", assetName + ".asset");
+        Debug.Log(assetName);
+        var (rootBone, allBones) = makeSkeleton(lib);
         var go = rootBone.gameObject;
         var avatar = AvatarBuilder.BuildGenericAvatar(go, "");
         makeDir("Avatars");
@@ -207,17 +236,50 @@ public class Importer : IDisposable
         var ani = go.AddComponent<Animator>();
         ani.avatar = avatar;
 
+        var rend = go.AddComponent<SkinnedMeshRenderer>();
+        rend.bones = allBones;
+
         makeDir("Rigs");
-        var prefab = PrefabUtility.SaveAsPrefabAsset(go, Path.Combine(root, "Rigs", assetName + ".prefab"));
+        var prefab = PrefabUtility.SaveAsPrefabAsset(go, pathJoin(root, "Rigs", assetName + ".prefab"));
         AssetDatabase.Refresh();
         GameObject.DestroyImmediate(go);
-        return PrefabUtility.InstantiatePrefab(prefab);
+        return prefab;
+    }
+
+    private GameObject importSkin(ZMeshLib lib, string skeleton, string assetName, MeshLoadSettings settings) 
+    {
+        var path = pathJoin(root, "Skins", assetName + ".asset");
+        makeDir("Skins");
+        //.Replace(".MDM", ".MDH")
+        var go = getOrMakePrefab(skeleton, assetName, PrefabType.Skeleton, settings);
+
+        var rend = go.GetComponent<SkinnedMeshRenderer>();
+        
+        using(var zmesh = lib.SkinnedMesh()) {
+            var mesh = makeSkinMesh(zmesh, rend.bones);
+            AssetDatabase.CreateAsset(mesh, path);
+            rend.sharedMesh = mesh;
+
+            if (settings.loadMaterials)
+            {
+                if (settings.materialSettings.loadTextures)
+                    makeDir("Textures");
+                makeDir("Materials");
+                rend.materials = makeMaterials(zmesh, settings.materialSettings);
+            }
+        }
+
+        makeDir("SkinnedPrefabs_");
+        var prefab = PrefabUtility.SaveAsPrefabAsset(go, pathJoin(root, "SkinnedPrefabs_", assetName + ".prefab"));
+        AssetDatabase.Refresh();
+        GameObject.DestroyImmediate(go);
+        return prefab;
     }
 
     private GameObject importMeshImplObj(ZMesh zmesh, MeshLoadSettings settings, string assetName)
     {
         var umesh = makeMesh(zmesh);
-        var path = Path.Combine(root, "Meshes", assetName + ".asset");
+        var path = pathJoin(root, "Meshes", assetName + ".asset");
         makeDir("Meshes");
         AssetDatabase.CreateAsset(umesh, path);
 
@@ -238,10 +300,10 @@ public class Importer : IDisposable
         return go;
     }
 
-    private UnityEngine.Object packageAsPrefab(GameObject go, string assetName)
+    private UnityEngine.Object packageAsPrefab(GameObject go, string path, string assetName)
     {
-        makeDir("Prefabs");
-        var prefab = PrefabUtility.SaveAsPrefabAsset(go, Path.Combine(root, "Prefabs", assetName + ".prefab"));
+        makeDir(path);
+        var prefab = PrefabUtility.SaveAsPrefabAsset(go, pathJoin(root, path, assetName + ".prefab"));
         AssetDatabase.Refresh();
         GameObject.DestroyImmediate(go);
         return prefab;
@@ -250,7 +312,7 @@ public class Importer : IDisposable
     private UnityEngine.Object importMeshImpl(ZMesh zmesh, MeshLoadSettings settings, string assetName)
     {
         var go = importMeshImplObj(zmesh, settings, assetName);
-        return packageAsPrefab(go, assetName);
+        return packageAsPrefab(go, "Models", assetName);
     }
 
     private GameObject[] importVOBs(VOB[] vobs, MeshLoadSettings settings)
@@ -268,13 +330,13 @@ public class Importer : IDisposable
             // if (vob.type() == VOB.Type.MobContainer)
             //     Debug.Log("CONTAINTER " + visual);
 
-            if (visual.EndsWith("3DS") || visual.EndsWith("ASC") || visual.EndsWith("MDS"))
+            if (visual.EndsWith("3DS"))// || visual.EndsWith("ASC") || visual.EndsWith("MDS"))
             {
-                var compressed = visual.Replace(".3DS", ".MRM").Replace(".ASC", ".MDL");
+                var compressed = visual.Replace(".3DS", ".MRM");//.Replace(".ASC", ".MDL");
                 if (name == "")
                     name = "[" + vob.visual() + "]";
-
-                obj = getOrMakePrefab(compressed, visual.Replace(".3DS", "").Replace(".ASC", ""), settings);
+                //.Replace(".ASC", "")
+                obj = getOrMakePrefab(compressed, visual.Replace(".3DS", ""), PrefabType.StaticMesh, settings);
             }
 
             if (obj == null && children.Length > 0)
@@ -295,17 +357,31 @@ public class Importer : IDisposable
         return result.ToArray();
     }
 
-    private GameObject getOrMakePrefab(string visual, string assetName, MeshLoadSettings settings)
-    {
-        var path = Path.Combine(root, "Prefabs", assetName + ".prefab");
+    private enum  PrefabType {
+        StaticMesh,
+        Skeleton,
+        SkinnedMesh,
+        DynamicMesh
+    }
+
+    private GameObject getOrMakePrefab(string visual, string assetName, PrefabType type, MeshLoadSettings settings)
+    {   
+        var path = pathJoin(root, "Prefabs", assetName + ".prefab");
         var prefab = loadAsset<UnityEngine.Object>(path);
         if (prefab == null)
         {
-            if (visual.EndsWith("MRM"))
+            if (type == PrefabType.StaticMesh) // visual.EndsWith("MRM")
                 using (var zmesh = new ZMesh(vdfs, visual))
                     prefab = importMeshImpl(zmesh, settings, assetName);
 
-            if (visual.EndsWith("MDL"))
+            if (type == PrefabType.Skeleton) {
+                // load mdl as mdl, mdm as mdh
+                using (var lib = new ZMeshLib(vdfs, visual)) { // visual.Replace(".MDM", "MDH"))
+                    prefab = importSkeleton(lib, assetName);
+                }
+            }
+
+            if (false)//visual.EndsWith("MDL"))
             {
                 // Debug.Log(visual);
                 var go = new GameObject(assetName);
@@ -323,9 +399,9 @@ public class Importer : IDisposable
                         child.transform.parent = go.transform;
                         dict.Add(tpl.Item1, child);
                     }
-                    void iterateNodes(GameObject parent, ZMeshLib.Node[] nodes)
+                    void iterateNodes(GameObject parent, ZMeshLib.NodeInfo nodes)
                     {
-                        foreach (var node in nodes) {
+                        foreach (var node in nodes.asTree) {
                             GameObject go;
                             if (node.name != "" && dict.ContainsKey(node.name))
                                 go = dict[node.name];
@@ -339,7 +415,7 @@ public class Importer : IDisposable
                     }
                     iterateNodes(go, lib.Nodes());
                 }
-                prefab = packageAsPrefab(go, assetName);
+                prefab = packageAsPrefab(go, "TODO", assetName);
             }
 
         }
@@ -360,9 +436,16 @@ public class Importer : IDisposable
             PrefabUtility.InstantiatePrefab(importMeshImpl(zmesh, settings, name));
     }
 
-    public void ImportSkeleton(string name) {
+    public void ImportSkeleton(string name) 
+    {
         using (var lib = new ZMeshLib(vdfs, name))
-            importSkeleton(lib, name);
+            PrefabUtility.InstantiatePrefab(importSkeleton(lib, name));
+    }
+
+    public void ImportSkin(string name, string skeletonAsset, MeshLoadSettings settings) 
+    {
+        using (var lib = new ZMeshLib(vdfs, name))
+            PrefabUtility.InstantiatePrefab(importSkin(lib, skeletonAsset, name, settings));
     }
 
     public void Dispose()
