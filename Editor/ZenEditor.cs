@@ -17,13 +17,8 @@ public class ZenEditor : EditorWindow
     private bool genShow = true;
     private LoadMode genLoadModeOld;
     public LoadMode genLoadMode = LoadMode.World;
-    private string[] genAvailableFiles;
-    private int genSelectedFileIndex;
-    public string genFileFilter = "";
-    public string genFileFilterOld = "";
-    private string[] genFilteredFiles;
-    private Vector2 genScroll = new Vector2();
     public bool genUseG2 = false;
+    private Vector2 genScroll = new Vector2();
 
     public string vdfsPath = "";
     public string vdfsVerifiedPath = "";
@@ -48,6 +43,14 @@ public class ZenEditor : EditorWindow
     public bool meshCreatePrefab = true;
     public bool meshOverwritePrefab = true;
 
+    private int fileBrowseOffset = 0;
+    private string[] fileAvailableList;
+    private string fileSelected = "";
+    public string fileFilter = "";
+    public string fileFilterOld = "";
+    private string[] fileFilteredList;
+    private Vector2 fileScroll = new Vector2();
+
     static private Texture2D iconImport;
     private Texture2D iconMaterial;
     private Texture2D iconFolder;
@@ -56,12 +59,16 @@ public class ZenEditor : EditorWindow
     private Texture2D iconTerrain;
     private Texture2D iconMesh;
     private Texture2D iconRefresh;
+    private Texture2D iconLeft;
+    private Texture2D iconRight;
     private Texture2D iconGothic;
-
+  
     private void OnEnable()
     {
         iconImport =        loadIcon("icons/", "import.png");
         iconRefresh =       loadIcon("icons/", "refresh.png");
+        iconLeft =          loadIcon("icons/", "tab_prev.png");
+        iconRight =         loadIcon("icons/", "tab_next.png");
         iconFolder =        loadIcon("icons/processed/", "folder icon.asset");
         iconFolderOpened =  loadIcon("icons/processed/", "folderopened icon.asset");
         iconMaterial =      loadIcon("icons/processed/unityengine/", "material icon.asset");
@@ -71,7 +78,7 @@ public class ZenEditor : EditorWindow
         iconGothic =        loadIcon("Assets/", "g_icon.png");
 
         genLoadModeOld = 1 - genLoadMode;
-        genFileFilterOld = genFileFilter + "-";
+        fileFilterOld = fileFilter + "-";
     }
 
     static Texture2D loadIcon(string iconsubpath, string icon)
@@ -89,7 +96,7 @@ public class ZenEditor : EditorWindow
         var window = GetWindow(typeof(ZenEditor));
 
         window.titleContent = new GUIContent("Gothic Importer", iconImport);
-    }
+    }    
 
     bool pathValid()
     {
@@ -143,6 +150,7 @@ public class ZenEditor : EditorWindow
 
     void reloadAvailableFiles()
     {
+        fileBrowseOffset = 0;
         var filter = genLoadMode switch
         {
             LoadMode.Model => ".MRM",
@@ -155,18 +163,18 @@ public class ZenEditor : EditorWindow
         {
             imp.LoadArchives(vdfsPath, getSelectedArchives());
             if (genLoadMode == LoadMode.Skeleton || genLoadMode == LoadMode.Skin)
-                genAvailableFiles = imp.AllFiles().Where(x => x.Contains(filter) || x.Contains(".MDL")).ToArray();
+                fileAvailableList = imp.AllFiles().Where(x => x.Contains(filter) || x.Contains(".MDL")).ToArray();
             else 
-                genAvailableFiles = imp.AllFiles().Where(x => x.Contains(filter)).ToArray();
+                fileAvailableList = imp.AllFiles().Where(x => x.Contains(filter)).ToArray();
         }
         reloadFilteredFiles();
     }
 
     void reloadFilteredFiles()
     {
-        genFilteredFiles = genFileFilter.Length > 0 ?
-        genAvailableFiles.Where(x => x.Contains(genFileFilter.ToUpper())).ToArray() :
-        genAvailableFiles;
+        fileFilteredList = fileFilter.Length > 0 ?
+            fileAvailableList.Where(x => x.Contains(fileFilter.ToUpper())).ToArray() :
+            fileAvailableList;
     }
 
 
@@ -343,9 +351,13 @@ public class ZenEditor : EditorWindow
         style.fixedHeight = 0;
         style.stretchWidth = true;
         EditorGUILayout.BeginHorizontal(style);
-
-        //tab = GUILayout.Toolbar (tab, new string[] {"Settings", "World", "Mesh"});
-
+        GUILayout.Space(40);
+        EditorGUILayout.BeginVertical();
+        GUILayout.Space(8);
+        tab = GUILayout.Toolbar (tab, new string[] {"Settings", "File", "Script"}, GUILayout.Height(24));
+        GUILayout.Space(8);
+        EditorGUILayout.EndVertical();
+        GUILayout.Space(40);
         //var old = GUI.backgroundColor;
         //GUI.backgroundColor = new Color(0, 0, 0, 0);
         //GUILayout.Box(iconGothic);
@@ -358,9 +370,7 @@ public class ZenEditor : EditorWindow
 
     string skinSkeletonFile_ = "";
 
-    void OnGUI()
-    {
-        headerView();
+    void settingsView() {
         genScroll = EditorGUILayout.BeginScrollView(genScroll);
         EditorGUILayout.Separator();
         
@@ -377,47 +387,102 @@ public class ZenEditor : EditorWindow
         }
 
         EditorGUILayout.EndScrollView();
+    }
 
-        if (pathValid()) {
-
-            if (genAvailableFiles == null) 
-                reloadAvailableFiles();
-
-            var s = new GUIStyle("Toolbar"); 
-            s.fixedHeight = 0;
+    void fileListView() {
         
-            EditorGUILayout.BeginVertical(s);
-            genFileFilter = EditorGUILayout.TextField("File Filter", genFileFilter).ToUpper();
-            if (genFileFilter != genFileFilterOld)
-                reloadFilteredFiles();
-            genFileFilterOld = genFileFilter;
+        var s = new GUIStyle("Toolbar"); 
+        s.fixedHeight = 0;
+    
+        EditorGUILayout.BeginVertical(s);
+        fileFilter = EditorGUILayout.TextField("File Filter", fileFilter).ToUpper();
+        if (fileFilter != fileFilterOld)
+            reloadFilteredFiles();
+        fileFilterOld = fileFilter;
+        EditorGUILayout.EndVertical();
 
-            if (genLoadMode == LoadMode.Skin)
-                skinSkeletonFile_ = EditorGUILayout.TextField("Skeleton file", skinSkeletonFile_).ToUpper();
+        fileScroll = EditorGUILayout.BeginScrollView(fileScroll);
 
-            EditorGUILayout.BeginHorizontal();
-            genSelectedFileIndex = EditorGUILayout.Popup("File to Import", genSelectedFileIndex, genFilteredFiles);
-            if (GUILayout.Button(new GUIContent(iconRefresh), EditorStyles.miniButton, GUILayout.Width(30)))
-                reloadAvailableFiles();
-            EditorGUILayout.EndHorizontal();
+        var style = new GUIStyle(EditorStyles.label);
+        style.normal.background = Texture2D.whiteTexture;
+        style.margin = new RectOffset(0, 0, 0, 0);
 
-            if (bigButton(genLoadMode switch {
-                LoadMode.World => "Load World", 
-                LoadMode.Model => "Load Mesh", 
-                LoadMode.Skeleton => "Load Skeleton",
-                LoadMode.Skin => "Load Skin",
-                _ => ""
-                //LoadMode.SkeletonSkin => ""
-            }))
-                runLoad();
-            
-            EditorGUILayout.EndVertical();
+        var origColor = GUI.backgroundColor;
+        var evenC = new Color(0,0,0,0);
+        var oddC = new Color(0,0,0,0.2f);
+        var highC = new Color(0.17f, 0.36f, 0.53f, 1.0f);
+        int count = 0;
+        foreach (var f in fileFilteredList.Skip(fileBrowseOffset * 100).Take(100)) {
+            GUI.backgroundColor = f == fileSelected ? highC : (count & 1) == 0 ? evenC : oddC;
+            if (GUILayout.Button(f, style))
+                fileSelected = f;
+            ++count;
+        }
+        GUI.backgroundColor = origColor;
+        EditorGUILayout.EndScrollView();
+        EditorGUILayout.Space(8);
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.FlexibleSpace();
+        if (GUILayout.Button(new GUIContent(iconLeft), EditorStyles.miniButtonLeft, GUILayout.Width(50)))
+            if (fileBrowseOffset > 0) {
+                --fileBrowseOffset;
+                fileScroll = Vector2.zero;
+            }
+        if (GUILayout.Button(new GUIContent(iconRefresh), EditorStyles.miniButtonMid, GUILayout.Width(50)))
+            reloadAvailableFiles();
+        if (GUILayout.Button(new GUIContent(iconRight), EditorStyles.miniButtonRight, GUILayout.Width(50)))
+            if (fileBrowseOffset < (fileFilteredList.Length + 99) / 100 - 1) {
+                ++fileBrowseOffset;
+                fileScroll = Vector2.zero;
+            }
+        GUILayout.FlexibleSpace();
+        EditorGUILayout.EndHorizontal();
+        EditorGUILayout.Space(8);
+    }
+
+    void loadFilterView() {
+        if (fileAvailableList == null) 
+            reloadAvailableFiles();
+
+        var s = new GUIStyle("Toolbar"); 
+        s.fixedHeight = 0;
+    
+        EditorGUILayout.BeginVertical(s);
+
+        if (genLoadMode == LoadMode.Skin)
+            skinSkeletonFile_ = EditorGUILayout.TextField("Skeleton file", skinSkeletonFile_).ToUpper();
+
+        if (bigButton(genLoadMode switch {
+            LoadMode.World => "Load World", 
+            LoadMode.Model => "Load Mesh", 
+            LoadMode.Skeleton => "Load Skeleton",
+            LoadMode.Skin => "Load Skin",
+            _ => ""
+            //LoadMode.SkeletonSkin => ""
+        }))
+            runLoad();
+        
+        EditorGUILayout.EndVertical();
+    }
+
+    void OnGUI()
+    {
+        headerView();
+
+        if (!pathValid())
+            tab = 0;
+
+        if (tab == 0)
+            settingsView();
+        if (tab == 1) {
+            fileListView();
+            loadFilterView();
         }
     }
 
     void runLoad()
     {
-        if (genFilteredFiles.Length <= genSelectedFileIndex) return;
+        if (fileSelected == "") return;
 
         var settings = new Importer.MeshLoadSettings() { 
             loadMaterials = genUseMaterials,
@@ -434,17 +499,17 @@ public class ZenEditor : EditorWindow
             imp.LoadArchives(vdfsPath, getSelectedArchives());
             if (genLoadMode == LoadMode.World)
             {
-                imp.LoadWorld(genFilteredFiles[genSelectedFileIndex], genUseG2);
+                imp.LoadWorld(fileSelected, genUseG2);
                 imp.ImportWorldMesh(settings);
             }
             if (genLoadMode == LoadMode.Model)
-                imp.ImportMesh(genFilteredFiles[genSelectedFileIndex], settings);
+                imp.ImportMesh(fileSelected, settings);
             
             if (genLoadMode == LoadMode.Skeleton) {
-                imp.ImportSkeleton(genFilteredFiles[genSelectedFileIndex]);
+                imp.ImportSkeleton(fileSelected);
             }
             if (genLoadMode == LoadMode.Skin) {
-                imp.ImportSkin(genFilteredFiles[genSelectedFileIndex], skinSkeletonFile_, settings);
+                imp.ImportSkin(fileSelected, skinSkeletonFile_, settings);
             }
         }
     }
