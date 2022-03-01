@@ -57,6 +57,8 @@ public class ZenEditor : EditorWindow
     private Texture2D iconFolderOpened;
     private Texture2D iconUnity;
     private Texture2D iconTerrain;
+    private Texture2D iconAvatar;
+    private Texture2D iconSkin;
     private Texture2D iconMesh;
     private Texture2D iconRefresh;
     private Texture2D iconLeft;
@@ -73,7 +75,9 @@ public class ZenEditor : EditorWindow
         iconFolderOpened =  loadIcon("icons/processed/", "folderopened icon.asset");
         iconMaterial =      loadIcon("icons/processed/unityengine/", "material icon.asset");
         iconTerrain =       loadIcon("icons/processed/unityengine/", "terrain icon.asset");
+        iconAvatar =        loadIcon("icons/processed/unityengine/", "avatar icon.asset");
         iconMesh =          loadIcon("icons/processed/unityengine/", "mesh icon.asset");
+        iconSkin =          loadIcon("icons/processed/unityengine/", "skinnedmeshrenderer icon.asset");
         iconUnity =         loadIcon("icons/processed/unityeditor/", "sceneasset icon.asset");
         iconGothic =        loadIcon("Assets/", "g_icon.png");
 
@@ -452,16 +456,39 @@ public class ZenEditor : EditorWindow
         if (genLoadMode == LoadMode.Skin)
             skinSkeletonFile_ = EditorGUILayout.TextField("Skeleton file", skinSkeletonFile_).ToUpper();
 
-        if (bigButton(genLoadMode switch {
+        
+        EditorGUILayout.Space();
+        GUILayout.BeginHorizontal();
+
+        GUILayout.FlexibleSpace();
+
+        genLoadMode = (LoadMode)GUILayout.Toolbar(
+            (int)genLoadMode, new Texture[] { iconTerrain, iconMesh, iconAvatar, iconSkin }, 
+            GUILayout.Height(24), GUILayout.Width(32*4));
+        
+        if (genLoadMode != genLoadModeOld)
+        {
+            reloadAvailableFiles();
+            Repaint();
+        }
+        genLoadModeOld = genLoadMode;
+
+        GUILayout.Space(24);
+
+        if (GUILayout.Button(genLoadMode switch {
             LoadMode.World => "Load World", 
             LoadMode.Model => "Load Mesh", 
             LoadMode.Skeleton => "Load Skeleton",
             LoadMode.Skin => "Load Skin",
             _ => ""
             //LoadMode.SkeletonSkin => ""
-        }))
+        }, GUILayout.Height(24), GUILayout.Width(32*4)))
             runLoad();
-        
+
+        GUILayout.FlexibleSpace();
+        GUILayout.EndHorizontal();
+        EditorGUILayout.Space();
+
         EditorGUILayout.EndVertical();
     }
 
