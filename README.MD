@@ -20,22 +20,31 @@ Load any static object as native unity mesh and store it as an asset. Any non-an
 ### World mesh
 Load entire level into a multi-material mesh asset. 
 
+### Skinned meshes
+Import bone hierarchies and skinned models that can be posed and animated.
+
 ### Materials and textures
 All textures that loaded meshes depend on will be automatically extracted. A generic user material is cloned into separate materials for all textures - this way the importer should work with any rendering pipeline.
 
+### Modelscript import
+Modelscript files contain metadata that ties together hierarchies, meshes, animations, and effects related to a particular entity. Currently this allows for automatic binding of skinned meshes to bone hierarchies.
+
 ### Vobs
-[Virtual Objects](https://regoth-project.github.io/REGoth-bs/case-studies/object-kinds.html) define a basic type of entity present in ZenGin. For our purposes, there represent a hierarchy of objects placed in the world - that is all vegetation, furniture, interactables, lights, trigger or audio zones, et cetera. 
+[Virtual Objects](https://regoth-project.github.io/REGoth-bs/case-studies/object-kinds.html) define a basic type of entity present in ZenGin. For our purposes, these represent a hierarchy of objects placed in the world - that is all vegetation, furniture, interactables, lights, trigger or audio zones, et cetera. 
 
 All Vobs that contain children or have a defined visual are imported into Unity hierarchy during a level load.  
 
 ### Prefabs
 All Vobs imported can be turned into prefabs. That way, after a level import a specific item can be given some additional functionality, and the change will be propagated through the whole level.
+Prefabs are also used to define bone hierarchies, and skinned models that use them become their prefab variants.
 
 ## TODO
 The following features are planned for the future:
-- Skinned meshes
 - Interactive meshes
 - Animations
+- Animation events
+- Lights
+- Navigation graph
 
 ## Not in scope
 ### Daedalus
@@ -47,7 +56,8 @@ Gothic runs it logic on a homebrew VM machine. Integration of it is not a goal, 
 * Press [Verify] 
 * Select gothic version and type of import
 * Setup material options
-* Select file to import from dropdown, optionally use filter to narrow down the selection
+* Select file type to import from dropdown (or use icon tabs in the next view)
+* Switch to file browser tab to select a file,optionally use a filter to narrow down the selection
 * Press import
 
 ## Notes
