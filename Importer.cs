@@ -236,7 +236,6 @@ public class Importer : IDisposable
     private GameObject importSkeleton(ZMeshLib lib, string assetName) 
     {
         var path = pathJoin(root, "Avatars", assetName + ".asset");
-        Debug.Log(assetName);
         var (rootBone, allBones) = makeSkeleton(lib);
         var go = rootBone.gameObject;
         var avatar = AvatarBuilder.BuildGenericAvatar(go, "");
@@ -257,7 +256,7 @@ public class Importer : IDisposable
         var path = pathJoin(root, "Skins", assetName + ".asset");
         makeDir("Skins");
         //.Replace(".MDM", ".MDH")
-        var go = getOrMakePrefab(skeleton, assetName, PrefabType.Skeleton, settings);
+        var go = getOrMakePrefab(skeleton, skeleton, PrefabType.Skeleton, settings);
 
         var rend = go.GetComponent<SkinnedMeshRenderer>();
         
@@ -357,13 +356,12 @@ public class Importer : IDisposable
         var prefab = loadAsset<UnityEngine.Object>(path);
         if (prefab == null)
         {
-            if (type == PrefabType.StaticMesh) // visual.EndsWith("MRM")
+            if (type == PrefabType.StaticMesh) // MRM
                 using (var zmesh = new ZMesh(vdfs, visual))
                     prefab = importMeshImpl(zmesh, settings, assetName);
 
             if (type == PrefabType.Skeleton) {
-                // load mdl as mdl, mdm as mdh
-                using (var lib = new ZMeshLib(vdfs, visual)) { // visual.Replace(".MDM", "MDH"))
+                using (var lib = new ZMeshLib(vdfs, visual)) { // MDl, MDH
                     prefab = importSkeleton(lib, assetName);
                 }
             }
@@ -428,10 +426,39 @@ public class Importer : IDisposable
             PrefabUtility.InstantiatePrefab(importSkeleton(lib, name));
     }
 
+    public string findSkin(string name) {
+        var n = System.IO.Path.GetFileNameWithoutExtension(name);
+        var mdl = n + ".MDL";
+        var mdm = n + ".MDM";
+        if (vdfs.Exists(mdl))
+            return mdl;
+        if (vdfs.Exists(mdm))
+            return mdm;
+        return "";    
+    }
+
     public void ImportSkin(string name, string skeletonAsset, MeshLoadSettings settings) 
     {
         using (var lib = new ZMeshLib(vdfs, name))
             PrefabUtility.InstantiatePrefab(importSkin(lib, skeletonAsset, name, settings));
+    }
+
+    public class ScriptData 
+    {
+        public string hierarchy = "";
+        public string baseMesh = "";
+        public string[] registeredMeshes = {};
+    }
+
+    public ScriptData ImportScript(string name) 
+    {
+        using (var zscript = new ZScript(vdfs, name)) {
+            var result = new ScriptData();
+            result.hierarchy = System.IO.Path.GetFileNameWithoutExtension(name.ToUpper()); // MDH
+            result.baseMesh = zscript.meshTree().ToUpper().Replace(".ASC", "");
+            result.registeredMeshes = zscript.registeredMeshes().Select(x => x.ToUpper().Replace(".ASC", "")).ToArray();
+            return result;
+        }
     }
 
     public void Dispose()

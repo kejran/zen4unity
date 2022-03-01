@@ -10,7 +10,8 @@ public class ZenEditor : EditorWindow
         World,
         Model,
         Skeleton,
-        Skin
+        Skin,
+        Script
     }
 
     public bool genUseMaterials = true;
@@ -60,10 +61,17 @@ public class ZenEditor : EditorWindow
     private Texture2D iconAvatar;
     private Texture2D iconSkin;
     private Texture2D iconMesh;
+    private Texture2D iconScript;
     private Texture2D iconRefresh;
     private Texture2D iconLeft;
     private Texture2D iconRight;
     private Texture2D iconGothic;
+
+    Importer.ScriptData scriptData;
+    Vector2 scriptScroll = Vector2.zero;
+    bool scriptImportSkeleton;
+    bool scriptImportTree;
+    bool[] scriptImportMeshes;
   
     private void OnEnable()
     {
@@ -78,6 +86,7 @@ public class ZenEditor : EditorWindow
         iconAvatar =        loadIcon("icons/processed/unityengine/", "avatar icon.asset");
         iconMesh =          loadIcon("icons/processed/unityengine/", "mesh icon.asset");
         iconSkin =          loadIcon("icons/processed/unityengine/", "skinnedmeshrenderer icon.asset");
+        iconScript =        loadIcon("icons/processed/unityengine/", "scriptableobject icon.asset");
         iconUnity =         loadIcon("icons/processed/unityeditor/", "sceneasset icon.asset");
         iconGothic =        loadIcon("Assets/", "g_icon.png");
 
@@ -155,21 +164,27 @@ public class ZenEditor : EditorWindow
     void reloadAvailableFiles()
     {
         fileBrowseOffset = 0;
-        var filter = genLoadMode switch
+        var filter1 = genLoadMode switch
         {
             LoadMode.Model => ".MRM",
             LoadMode.World => ".ZEN",
             LoadMode.Skeleton => ".MDH",
             LoadMode.Skin => ".MDM",
-            _ => ""
+            LoadMode.Script => ".MDS",
+            _ => "$$$$$$$$$$$$"
         };
+        var filter2 = genLoadMode switch
+        {
+            LoadMode.Skeleton => ".MDL",
+            LoadMode.Skin => ".MDL",
+            LoadMode.Script=> ".MSB",
+            _ => "$$$$$$$$$$$$"
+        };
+
         using (var imp = new Importer())
         {
             imp.LoadArchives(vdfsPath, getSelectedArchives());
-            if (genLoadMode == LoadMode.Skeleton || genLoadMode == LoadMode.Skin)
-                fileAvailableList = imp.AllFiles().Where(x => x.Contains(filter) || x.Contains(".MDL")).ToArray();
-            else 
-                fileAvailableList = imp.AllFiles().Where(x => x.Contains(filter)).ToArray();
+            fileAvailableList = imp.AllFiles().Where(x => x.Contains(filter1) || x.Contains(filter2)).ToArray();
         }
         reloadFilteredFiles();
     }
@@ -463,8 +478,8 @@ public class ZenEditor : EditorWindow
         GUILayout.FlexibleSpace();
 
         genLoadMode = (LoadMode)GUILayout.Toolbar(
-            (int)genLoadMode, new Texture[] { iconTerrain, iconMesh, iconAvatar, iconSkin }, 
-            GUILayout.Height(24), GUILayout.Width(32*4));
+            (int)genLoadMode, new Texture[] { iconTerrain, iconMesh, iconAvatar, iconSkin, iconScript }, 
+            GUILayout.Height(24), GUILayout.Width(32*5));
         
         if (genLoadMode != genLoadModeOld)
         {
@@ -480,9 +495,10 @@ public class ZenEditor : EditorWindow
             LoadMode.Model => "Load Mesh", 
             LoadMode.Skeleton => "Load Skeleton",
             LoadMode.Skin => "Load Skin",
+            LoadMode.Script => "Load Script",
             _ => ""
             //LoadMode.SkeletonSkin => ""
-        }, GUILayout.Height(24), GUILayout.Width(32*4)))
+        }, GUILayout.Height(24), GUILayout.Width(32*5)))
             runLoad();
 
         GUILayout.FlexibleSpace();
@@ -490,6 +506,91 @@ public class ZenEditor : EditorWindow
         EditorGUILayout.Space();
 
         EditorGUILayout.EndVertical();
+    }
+
+    Importer.MeshLoadSettings makeMeshSettings() {
+        return new Importer.MeshLoadSettings() { 
+            loadMaterials = genUseMaterials,
+            materialSettings = new Importer.MaterialLoadSettings()
+            {
+                opaqueMaterialTemplate = matBaseOpaque,
+                transparentMaterialTemplate = matBaseTransparent,
+                loadTextures = matLoadTextures
+            }
+        };
+    }
+
+
+    void scriptView() {
+        if (scriptData == null)
+            return;
+
+        scriptScroll = EditorGUILayout.BeginScrollView(scriptScroll);
+        
+        EditorGUILayout.BeginVertical(EditorStyles.toolbar);
+        EditorGUILayout.Foldout(true, "Hierarchy");
+        EditorGUILayout.EndVertical();
+        ++EditorGUI.indentLevel;
+        scriptImportSkeleton = EditorGUILayout.ToggleLeft(scriptData.hierarchy, scriptImportSkeleton);
+        --EditorGUI.indentLevel;
+        EditorGUILayout.Separator();
+
+        if (scriptData.baseMesh != "") {
+            EditorGUILayout.BeginVertical(EditorStyles.toolbar);
+            EditorGUILayout.Foldout(true, "Base mesh");
+            EditorGUILayout.EndVertical();
+            ++EditorGUI.indentLevel;
+            scriptImportTree = EditorGUILayout.ToggleLeft(scriptData.baseMesh, scriptImportTree);
+            --EditorGUI.indentLevel;
+            EditorGUILayout.Separator();
+        }
+        
+        EditorGUILayout.BeginVertical(EditorStyles.toolbar);
+        EditorGUILayout.Foldout(true, "Registered meshes");
+        EditorGUILayout.EndVertical();
+        ++EditorGUI.indentLevel;
+        var c = GUI.backgroundColor;
+        for (int i = 0; i < scriptData.registeredMeshes.Length; ++i) 
+            scriptImportMeshes[i] = EditorGUILayout.ToggleLeft(
+                scriptData.registeredMeshes[i], scriptImportMeshes[i]);
+
+        --EditorGUI.indentLevel;
+        EditorGUILayout.Separator();
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.FlexibleSpace();
+        if (GUILayout.Button("None", EditorStyles.miniButtonLeft, GUILayout.Width(48)))
+            for (int i = 0; i < scriptImportMeshes.Length; ++i)
+                scriptImportMeshes[i] = false;
+        if (GUILayout.Button("All", EditorStyles.miniButtonRight, GUILayout.Width(48)))
+            for (int i = 0; i < scriptImportMeshes.Length; ++i)
+                scriptImportMeshes[i] = true;
+        GUILayout.FlexibleSpace();
+        EditorGUILayout.EndHorizontal();        
+        EditorGUILayout.Separator();
+
+        EditorGUILayout.EndScrollView();
+
+        if (bigButton("Load script")) {
+            var importer = new Importer("Assets/Gothic");
+            var skeleton = scriptData.hierarchy + ".MDH";
+            var settings = makeMeshSettings();
+
+            void tryImportSkin(string skin) {
+                var path = importer.findSkin(skin);
+                if (path != "")
+                    importer.ImportSkin(path, skeleton, settings);
+                else 
+                    Debug.LogWarningFormat("Failed to find skin [{0}]", skin);
+            }
+
+            if (scriptImportSkeleton)
+                importer.ImportSkeleton(skeleton);
+            if (scriptImportTree && scriptData.baseMesh != "") 
+                tryImportSkin(scriptData.baseMesh);
+            for (int i = 0; i < scriptImportMeshes.Length; ++i)  
+                if (scriptImportMeshes[i]) 
+                    tryImportSkin(scriptData.registeredMeshes[i]); 
+        }
     }
 
     void OnGUI()
@@ -505,21 +606,15 @@ public class ZenEditor : EditorWindow
             fileListView();
             loadFilterView();
         }
+        if (tab == 2)
+            scriptView();
     }
 
     void runLoad()
     {
         if (fileSelected == "") return;
 
-        var settings = new Importer.MeshLoadSettings() { 
-            loadMaterials = genUseMaterials,
-            materialSettings = new Importer.MaterialLoadSettings()
-            {
-                opaqueMaterialTemplate = matBaseOpaque,
-                transparentMaterialTemplate = matBaseTransparent,
-                loadTextures = matLoadTextures
-            }
-        };
+        var settings = makeMeshSettings();
         
         using (var imp = new Importer("Assets/Gothic"))
         {
@@ -537,6 +632,13 @@ public class ZenEditor : EditorWindow
             }
             if (genLoadMode == LoadMode.Skin) {
                 imp.ImportSkin(fileSelected, skinSkeletonFile_, settings);
+            }
+            if (genLoadMode == LoadMode.Script) {
+                scriptData = imp.ImportScript(fileSelected);
+                scriptImportTree = true;
+                scriptImportSkeleton = true;
+                scriptImportMeshes = scriptData.registeredMeshes.Select(x => false).ToArray();
+                tab = 2;
             }
         }
     }

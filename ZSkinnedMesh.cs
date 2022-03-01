@@ -135,7 +135,6 @@ namespace ZenGlue
 		}
 
 		public uint submeshCount() {
-			Debug.Log(zg_skinnedmesh_submesh_count(handle));
 			return zg_skinnedmesh_submesh_count(handle);
 		}
 
