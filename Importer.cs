@@ -411,7 +411,16 @@ public class Importer : IDisposable
         using (var zmesh = zen!.mesh())
             PrefabUtility.InstantiatePrefab(importMeshImpl(zmesh, settings, zen.Name));
 
-        importVOBs(zen.data().vobs(), settings);
+    }
+
+    public void ImportVobs(MeshLoadSettings settings) {
+        importVOBs(zen!.data().vobs(), settings);
+    }
+
+    public void ImportWaynet() {
+        var go = new GameObject();
+        var r = go.AddComponent<WaynetRenderer>();
+        r.waynet = zen!.data().waynet();
     }
 
     public void ImportMesh(string name, MeshLoadSettings settings)

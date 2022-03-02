@@ -37,6 +37,8 @@ public class ZenEditor : EditorWindow
 
     private bool worldShow = true;
     public string[] worldFiles = new string[0];
+    public bool worldLoadMesh = true;
+    public bool worldLoadWaynet = true;
     public bool worldLoadVOBs = true;
     public bool worldNestVOBs = true;
 
@@ -306,6 +308,8 @@ public class ZenEditor : EditorWindow
         if (worldShow)
         {
             ++EditorGUI.indentLevel;
+            worldLoadMesh = EditorGUILayout.Toggle("Load Mesh", worldLoadMesh);
+            worldLoadWaynet = EditorGUILayout.Toggle("Load Waynet", worldLoadWaynet);
             worldLoadVOBs = EditorGUILayout.Toggle("Load VOBs", worldLoadVOBs);
             EditorGUILayout.Separator();
             EditorGUI.BeginDisabledGroup(!worldLoadVOBs);
@@ -544,7 +548,7 @@ public class ZenEditor : EditorWindow
             --EditorGUI.indentLevel;
             EditorGUILayout.Separator();
         }
-        
+
         EditorGUILayout.BeginVertical(EditorStyles.toolbar);
         EditorGUILayout.Foldout(true, "Registered meshes");
         EditorGUILayout.EndVertical();
@@ -622,7 +626,12 @@ public class ZenEditor : EditorWindow
             if (genLoadMode == LoadMode.World)
             {
                 imp.LoadWorld(fileSelected, genUseG2);
-                imp.ImportWorldMesh(settings);
+                if (worldLoadMesh)
+                    imp.ImportWorldMesh(settings);
+                if (worldLoadVOBs)
+                    imp.ImportVobs(settings);
+                if (worldLoadWaynet)
+                    imp.ImportWaynet();
             }
             if (genLoadMode == LoadMode.Model)
                 imp.ImportMesh(fileSelected, settings);
