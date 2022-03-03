@@ -272,6 +272,105 @@ public class Importer : IDisposable
         return packageAsPrefab(go, "Prefabs/Skins", assetName);
     }
 
+    bool isStatic(Vector3[] array) {
+        var first = array[0];
+        for (int i = 1; i < array.Length; ++i)
+            if ((array[i] - first).sqrMagnitude > 0.001f)
+                return false;
+        return true;
+    }
+
+    bool isStatic(Quaternion[] array) {
+        var first = array[0];
+        for (int i = 1; i < array.Length; ++i)
+            if (Mathf.Abs(Quaternion.Dot(array[i], first)) > 0.001f)
+                return false;
+        return true;
+    }
+
+    private void importAnimation(ZAni zani, string skeleton, string assetName) 
+    {
+        var path = pathJoin(root, "Animations", assetName + ".asset");
+        makeDir("Animations");
+
+        var go = getOrMakePrefab(skeleton, skeleton, PrefabType.Skeleton, new MeshLoadSettings());
+        var ani = new AnimationClip();
+
+        var nodes = zani.nodeIndices();
+        var frames = zani.frames();
+        var samples = zani.packedSamples();
+        float invFps = 1.0f / zani.fps();
+
+        var nextAni_ = zani.next().ToUpper();
+        var nextAniName = nextAni_.Length > 0 ? System.IO.Path.GetFileNameWithoutExtension(skeleton) + 
+            "-" + nextAni_ + ".MAN" : nextAni_;
+        
+        // todo add looping/next dummy frame at the end
+
+        if (frames == 0)
+        {
+            Debug.LogWarning(assetName + " is empty");
+            return;
+        }
+
+        var skin = go.GetComponent<SkinnedMeshRenderer>();
+        
+        for (uint node = 0; node < nodes.Length; ++node) {
+            var t = skin.bones[nodes[node]];
+            var rel = AnimationUtility.CalculateTransformPath(t, go.transform);
+            
+            var curves = new AnimationCurve[7];
+            for (int i = 0; i < 7; ++i)
+                curves[i] = new AnimationCurve();
+
+            var translation0 = samples[node].position;
+            bool encodeTranslation = false;
+            
+            for (uint s = 0; s < frames; ++s) {
+                var sample = samples[nodes.Length * s + node];
+                float time = s * invFps;
+
+                if ((translation0 - sample.position).sqrMagnitude > 0.001f)
+                    encodeTranslation = true;
+
+                curves[0].AddKey(time, sample.position.x);
+                curves[1].AddKey(time, sample.position.y);
+                curves[2].AddKey(time, sample.position.z);
+                
+                curves[3].AddKey(time, sample.rotation.x);
+                curves[4].AddKey(time, sample.rotation.y);
+                curves[5].AddKey(time, sample.rotation.z);
+                curves[6].AddKey(time, sample.rotation.w);
+            }
+
+            if (encodeTranslation) 
+            {
+                ani.SetCurve(rel, typeof(Transform), "localPosition.x", curves[0]);
+                ani.SetCurve(rel, typeof(Transform), "localPosition.y", curves[1]);
+                ani.SetCurve(rel, typeof(Transform), "localPosition.z", curves[2]);
+            } else 
+            {
+                float end = invFps * (frames - 1);
+                ani.SetCurve(rel, typeof(Transform), "localPosition.x", AnimationCurve.Constant(0, end, translation0.x));
+                ani.SetCurve(rel, typeof(Transform), "localPosition.y", AnimationCurve.Constant(0, end, translation0.y));
+                ani.SetCurve(rel, typeof(Transform), "localPosition.z", AnimationCurve.Constant(0, end, translation0.z));
+            }
+            
+            ani.SetCurve(rel, typeof(Transform), "localRotation.x", curves[3]);
+            ani.SetCurve(rel, typeof(Transform), "localRotation.y", curves[4]);
+            ani.SetCurve(rel, typeof(Transform), "localRotation.z", curves[5]);
+            ani.SetCurve(rel, typeof(Transform), "localRotation.w", curves[6]);
+        }
+
+        ani.EnsureQuaternionContinuity();
+        
+        AssetDatabase.CreateAsset(ani, path);
+
+        GameObject.DestroyImmediate(go);
+
+        //return packageAsPrefab(go, "Prefabs/Skins", assetName);
+    }
+
     private GameObject importMeshImplObj(ZMesh zmesh, MeshLoadSettings settings, string assetName)
     {
         var umesh = makeMesh(zmesh);
@@ -452,11 +551,18 @@ public class Importer : IDisposable
             PrefabUtility.InstantiatePrefab(importSkin(lib, skeletonAsset, name, settings));
     }
 
+    public void ImportAnimation(string name, string skeletonAsset) 
+    {
+        using (var lib = new ZAni(vdfs, name))
+            /*PrefabUtility.InstantiatePrefab(*/importAnimation(lib, skeletonAsset, name);//);
+    }
+
     public class ScriptData 
     {
         public string hierarchy = "";
         public string baseMesh = "";
         public string[] registeredMeshes = {};
+        public string[] anims = {};
     }
 
     public ScriptData ImportScript(string name) 
@@ -466,6 +572,12 @@ public class Importer : IDisposable
             result.hierarchy = System.IO.Path.GetFileNameWithoutExtension(name.ToUpper()); // MDH
             result.baseMesh = zscript.meshTree().ToUpper().Replace(".ASC", "");
             result.registeredMeshes = zscript.registeredMeshes().Select(x => x.ToUpper().Replace(".ASC", "")).ToArray();
+            var anims = zscript.getAnis();
+            var aniascs = new HashSet<string>();
+            foreach (var a in anims)
+                if (a.asc != "")
+                    aniascs.Add(System.IO.Path.GetFileNameWithoutExtension(a.name.ToUpper()));
+            result.anims = aniascs.ToArray().OrderBy(x => x.Length > 2 && x[1] == '_' ? x.Substring(2) : "_" + x).ToArray();
             return result;
         }
     }

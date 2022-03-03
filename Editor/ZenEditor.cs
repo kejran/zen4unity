@@ -11,6 +11,7 @@ public class ZenEditor : EditorWindow
         Model,
         Skeleton,
         Skin,
+        Animation,
         Script
     }
 
@@ -53,6 +54,7 @@ public class ZenEditor : EditorWindow
     public string fileFilterOld = "";
     private string[] fileFilteredList;
     private Vector2 fileScroll = new Vector2();
+    private string fileSkeleton = "";
 
     static private Texture2D iconImport;
     private Texture2D iconMaterial;
@@ -63,6 +65,7 @@ public class ZenEditor : EditorWindow
     private Texture2D iconAvatar;
     private Texture2D iconSkin;
     private Texture2D iconMesh;
+    private Texture2D iconAnimation;
     private Texture2D iconScript;
     private Texture2D iconRefresh;
     private Texture2D iconLeft;
@@ -74,6 +77,7 @@ public class ZenEditor : EditorWindow
     bool scriptImportSkeleton;
     bool scriptImportTree;
     bool[] scriptImportMeshes;
+    bool[] scriptImportAnis;
   
     private void OnEnable()
     {
@@ -88,6 +92,7 @@ public class ZenEditor : EditorWindow
         iconAvatar =        loadIcon("icons/processed/unityengine/", "avatar icon.asset");
         iconMesh =          loadIcon("icons/processed/unityengine/", "mesh icon.asset");
         iconSkin =          loadIcon("icons/processed/unityengine/", "skinnedmeshrenderer icon.asset");
+        iconAnimation =     loadIcon("icons/processed/unityengine/", "animationclip icon.asset");
         iconScript =        loadIcon("icons/processed/unityengine/", "scriptableobject icon.asset");
         iconUnity =         loadIcon("icons/processed/unityeditor/", "sceneasset icon.asset");
         iconGothic =        loadIcon("Assets/", "g_icon.png");
@@ -172,6 +177,7 @@ public class ZenEditor : EditorWindow
             LoadMode.World => ".ZEN",
             LoadMode.Skeleton => ".MDH",
             LoadMode.Skin => ".MDM",
+            LoadMode.Animation => ".MAN",
             LoadMode.Script => ".MDS",
             _ => "$$$$$$$$$$$$"
         };
@@ -391,7 +397,6 @@ public class ZenEditor : EditorWindow
         EditorGUILayout.EndHorizontal();
     }
 
-    string skinSkeletonFile_ = "";
 
     void settingsView() {
         genScroll = EditorGUILayout.BeginScrollView(genScroll);
@@ -472,9 +477,8 @@ public class ZenEditor : EditorWindow
     
         EditorGUILayout.BeginVertical(s);
 
-        if (genLoadMode == LoadMode.Skin)
-            skinSkeletonFile_ = EditorGUILayout.TextField("Skeleton file", skinSkeletonFile_).ToUpper();
-
+        if (genLoadMode == LoadMode.Skin || genLoadMode == LoadMode.Animation)
+            fileSkeleton = EditorGUILayout.TextField("Skeleton file", fileSkeleton).ToUpper();
         
         EditorGUILayout.Space();
         GUILayout.BeginHorizontal();
@@ -482,8 +486,8 @@ public class ZenEditor : EditorWindow
         GUILayout.FlexibleSpace();
 
         genLoadMode = (LoadMode)GUILayout.Toolbar(
-            (int)genLoadMode, new Texture[] { iconTerrain, iconMesh, iconAvatar, iconSkin, iconScript }, 
-            GUILayout.Height(24), GUILayout.Width(32*5));
+            (int)genLoadMode, new Texture[] { iconTerrain, iconMesh, iconAvatar, iconSkin, iconAnimation, iconScript }, 
+            GUILayout.Height(24), GUILayout.Width(32*6));
         
         if (genLoadMode != genLoadModeOld)
         {
@@ -499,10 +503,10 @@ public class ZenEditor : EditorWindow
             LoadMode.Model => "Load Mesh", 
             LoadMode.Skeleton => "Load Skeleton",
             LoadMode.Skin => "Load Skin",
+            LoadMode.Animation => "Load Animation",
             LoadMode.Script => "Load Script",
             _ => ""
-            //LoadMode.SkeletonSkin => ""
-        }, GUILayout.Height(24), GUILayout.Width(32*5)))
+        }, GUILayout.Height(24), GUILayout.Width(32*4)))
             runLoad();
 
         GUILayout.FlexibleSpace();
@@ -524,6 +528,27 @@ public class ZenEditor : EditorWindow
         };
     }
 
+    bool foldout(bool value, string text) {
+        EditorGUILayout.BeginVertical(EditorStyles.toolbar);
+        var v = EditorGUILayout.Foldout(value, text);
+        EditorGUILayout.EndVertical();
+        return v;
+    }
+
+    void listSelectBtn(bool[] values) {
+        EditorGUILayout.Separator();
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.FlexibleSpace();
+        if (GUILayout.Button("None", EditorStyles.miniButtonLeft, GUILayout.Width(48)))
+            for (int i = 0; i < values.Length; ++i)
+                values[i] = false;
+        if (GUILayout.Button("All", EditorStyles.miniButtonRight, GUILayout.Width(48)))
+            for (int i = 0; i < values.Length; ++i)
+                values[i] = true;
+        GUILayout.FlexibleSpace();
+        EditorGUILayout.EndHorizontal();   
+        EditorGUILayout.Separator();     
+    }
 
     void scriptView() {
         if (scriptData == null)
@@ -531,27 +556,21 @@ public class ZenEditor : EditorWindow
 
         scriptScroll = EditorGUILayout.BeginScrollView(scriptScroll);
         
-        EditorGUILayout.BeginVertical(EditorStyles.toolbar);
-        EditorGUILayout.Foldout(true, "Hierarchy");
-        EditorGUILayout.EndVertical();
+        foldout(true, "Hierarchy");
         ++EditorGUI.indentLevel;
         scriptImportSkeleton = EditorGUILayout.ToggleLeft(scriptData.hierarchy, scriptImportSkeleton);
         --EditorGUI.indentLevel;
         EditorGUILayout.Separator();
 
         if (scriptData.baseMesh != "") {
-            EditorGUILayout.BeginVertical(EditorStyles.toolbar);
-            EditorGUILayout.Foldout(true, "Base mesh");
-            EditorGUILayout.EndVertical();
+            foldout(true, "Base mesh");
             ++EditorGUI.indentLevel;
             scriptImportTree = EditorGUILayout.ToggleLeft(scriptData.baseMesh, scriptImportTree);
             --EditorGUI.indentLevel;
             EditorGUILayout.Separator();
         }
 
-        EditorGUILayout.BeginVertical(EditorStyles.toolbar);
-        EditorGUILayout.Foldout(true, "Registered meshes");
-        EditorGUILayout.EndVertical();
+        foldout(true, "Registered meshes");
         ++EditorGUI.indentLevel;
         var c = GUI.backgroundColor;
         for (int i = 0; i < scriptData.registeredMeshes.Length; ++i) 
@@ -559,18 +578,16 @@ public class ZenEditor : EditorWindow
                 scriptData.registeredMeshes[i], scriptImportMeshes[i]);
 
         --EditorGUI.indentLevel;
-        EditorGUILayout.Separator();
-        EditorGUILayout.BeginHorizontal();
-        GUILayout.FlexibleSpace();
-        if (GUILayout.Button("None", EditorStyles.miniButtonLeft, GUILayout.Width(48)))
-            for (int i = 0; i < scriptImportMeshes.Length; ++i)
-                scriptImportMeshes[i] = false;
-        if (GUILayout.Button("All", EditorStyles.miniButtonRight, GUILayout.Width(48)))
-            for (int i = 0; i < scriptImportMeshes.Length; ++i)
-                scriptImportMeshes[i] = true;
-        GUILayout.FlexibleSpace();
-        EditorGUILayout.EndHorizontal();        
-        EditorGUILayout.Separator();
+        listSelectBtn(scriptImportMeshes);
+
+        foldout(true, "Animations");
+        ++EditorGUI.indentLevel;
+        for (int i = 0; i < scriptData.anims.Length; ++i) 
+            scriptImportAnis[i] = EditorGUILayout.ToggleLeft(
+                scriptData.anims[i], scriptImportAnis[i]);
+
+        --EditorGUI.indentLevel;
+        listSelectBtn(scriptImportAnis);
 
         EditorGUILayout.EndScrollView();
 
@@ -594,6 +611,9 @@ public class ZenEditor : EditorWindow
             for (int i = 0; i < scriptImportMeshes.Length; ++i)  
                 if (scriptImportMeshes[i]) 
                     tryImportSkin(scriptData.registeredMeshes[i]); 
+            for (int i = 0; i < scriptImportAnis.Length; ++i)  
+                if (scriptImportAnis[i]) 
+                    importer.ImportAnimation(scriptData.hierarchy + "-" + scriptData.anims[i] + ".MAN", skeleton); 
         }
     }
 
@@ -640,13 +660,17 @@ public class ZenEditor : EditorWindow
                 imp.ImportSkeleton(fileSelected);
             }
             if (genLoadMode == LoadMode.Skin) {
-                imp.ImportSkin(fileSelected, skinSkeletonFile_, settings);
+                imp.ImportSkin(fileSelected, fileSkeleton, settings);
+            }
+            if (genLoadMode == LoadMode.Animation) {
+                imp.ImportAnimation(fileSelected, fileSkeleton);
             }
             if (genLoadMode == LoadMode.Script) {
                 scriptData = imp.ImportScript(fileSelected);
                 scriptImportTree = true;
                 scriptImportSkeleton = true;
                 scriptImportMeshes = scriptData.registeredMeshes.Select(x => false).ToArray();
+                scriptImportAnis = scriptData.anims.Select(x => false).ToArray();
                 tab = 2;
             }
         }

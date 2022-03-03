@@ -18,6 +18,20 @@ namespace ZenGlue
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    public struct float4
+    {
+        public float x;
+        public float y;
+        public float z;
+        public float w;
+
+        public Quaternion toUnityQuaternion()
+        {
+            return new Quaternion(-x, -y, -z, w);
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     public struct float3
     {
         public float x;
