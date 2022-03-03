@@ -290,8 +290,9 @@ public class Importer : IDisposable
 
     private void importAnimation(ZAni zani, string skeleton, string assetName) 
     {
-        var path = pathJoin(root, "Animations", assetName + ".asset");
-        makeDir("Animations");
+        var sp = assetName.Split('-', 2);
+        var path = pathJoin(root, "Animations", sp[0], sp[1].Replace(".MAN", "") + ".asset");
+        makeDir("Animations/" + sp[0]);
 
         var go = getOrMakePrefab(skeleton, skeleton, PrefabType.Skeleton, new MeshLoadSettings());
         var ani = new AnimationClip();
