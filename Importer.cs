@@ -253,8 +253,8 @@ public class Importer : IDisposable
 
     private GameObject importSkin(ZMeshLib lib, string skeleton, string assetName, MeshLoadSettings settings) 
     {
-        var path = pathJoin(root, "Skins", assetName + ".asset");
-        makeDir("Skins");
+        var path = pathJoin(root, "Meshes/Skins", assetName + ".asset");
+        makeDir("Meshes/Skins");
         //.Replace(".MDM", ".MDH")
         var go = getOrMakePrefab(skeleton, skeleton, PrefabType.Skeleton, settings);
 
@@ -269,7 +269,7 @@ public class Importer : IDisposable
                 rend.materials = makeMaterials(zmesh, settings.materialSettings);
         }
 
-        return packageAsPrefab(go, "Prefabs/Skins", assetName);
+        return packageAsPrefab(go, "Models/Skins", assetName);
     }
 
     bool isStatic(Vector3[] array) {
@@ -372,22 +372,77 @@ public class Importer : IDisposable
         //return packageAsPrefab(go, "Prefabs/Skins", assetName);
     }
 
-    private GameObject importMeshImplObj(ZMesh zmesh, MeshLoadSettings settings, string assetName)
+    private void makeMorphs(Mesh mesh, uint[] vertexIds, ZMorph.Blend[] morphs) {
+
+        // vertexIds = currentId -> originalId
+        // ani = [originalid]
+
+        int counter = 0;
+        foreach (var morph in morphs) 
+        {
+            ++counter;
+            var vertexCount = morph.indices.Length;
+            float invTime = 1.0f / morph.frames;
+
+            for (int f = 0; f < morph.frames; ++f) 
+            {
+                var update = new Dictionary<uint, Vector3>();
+                for (int v = 0; v < vertexCount; ++v)     
+                    update[morph.indices[v]] = morph.vertices[v + vertexCount * f];
+
+                var delta = new Vector3[mesh.vertexCount];
+                for (uint v = 0; v < delta.Length; ++v) {
+
+                    if (update.TryGetValue(vertexIds[v], out var value))
+                        delta[v] = value;
+                    else 
+                        delta[v] = Vector3.zero;
+                }
+                var name = morph.name + "@" + counter.ToString(); // todo handle better?
+                mesh.AddBlendShapeFrame(name, (1 + f) * invTime, delta, null, null);
+            }
+        }
+    }
+
+    private GameObject importMeshImplObj(ZMesh zmesh, MeshLoadSettings settings, string assetName, ZMorph.Blend[]? morphs)
     {
+        var folder = morphs == null ? "Meshes/Static" : "Meshes/Morphs"; 
         var umesh = makeMesh(zmesh);
-        var path = pathJoin(root, "Meshes", assetName + ".asset");
-        makeDir("Meshes");
+        var path = pathJoin(root, folder, assetName + ".asset");
+        makeDir(folder);
+
+        if (morphs != null) 
+        {
+            makeMorphs(umesh, zmesh.vertexIds(), morphs);
+        
+            //hack around broken blenshapes, wtf????
+            //https://issuetracker.unity3d.com/issues/blendshapes-added-with-mesh-dot-addblendshapeframe-are-not-updated-correctly-when-modifying-the-offsets
+            umesh.vertices = umesh.vertices;
+        }
+
         AssetDatabase.CreateAsset(umesh, path);
 
         var go = new GameObject();
         go.name = assetName;
-        var mf = go.AddComponent<MeshFilter>();
-        mf.mesh = umesh;
 
-        var mr = go.AddComponent<MeshRenderer>();
-        
-        if (settings.loadMaterials)
-            mr.materials = makeMaterials(zmesh, settings.materialSettings);
+        if (morphs != null) 
+        {
+            var smr = go.AddComponent<SkinnedMeshRenderer>();
+            smr.sharedMesh = umesh;
+
+            if (settings.loadMaterials)
+                smr.materials = makeMaterials(zmesh, settings.materialSettings);
+        } 
+        else 
+        {
+            var mf = go.AddComponent<MeshFilter>();
+            mf.mesh = umesh;
+
+            var mr = go.AddComponent<MeshRenderer>();
+            
+            if (settings.loadMaterials)
+                mr.materials = makeMaterials(zmesh, settings.materialSettings);
+        }
  
         return go;
     }
@@ -402,10 +457,10 @@ public class Importer : IDisposable
         return prefab;
     }
 
-    private GameObject importMeshImpl(ZMesh zmesh, MeshLoadSettings settings, string assetName)
+    private GameObject importMeshImpl(ZMesh zmesh, MeshLoadSettings settings, string assetName, ZMorph.Blend[]? blends)
     {
-        var go = importMeshImplObj(zmesh, settings, assetName);
-        return packageAsPrefab(go, "Models", assetName);
+        var go = importMeshImplObj(zmesh, settings, assetName, blends);
+        return packageAsPrefab(go, blends == null ? "Models/Static" : "Models/Morphs", assetName);
     }
 
     private GameObject[] importVOBs(VOB[] vobs, MeshLoadSettings settings)
@@ -458,7 +513,7 @@ public class Importer : IDisposable
         {
             if (type == PrefabType.StaticMesh) // MRM
                 using (var zmesh = new ZMesh(vdfs, visual))
-                    prefab = importMeshImpl(zmesh, settings, assetName);
+                    prefab = importMeshImpl(zmesh, settings, assetName, null);
 
             if (type == PrefabType.Skeleton) {
                 using (var lib = new ZMeshLib(vdfs, visual)) { // MDl, MDH
@@ -477,7 +532,7 @@ public class Importer : IDisposable
                     foreach (var tpl in attached)
                     {
                         // Debug.Log(assetName + "@" + tpl.Item1);
-                        var child = importMeshImplObj(tpl.Item2, settings, assetName + "@" + tpl.Item1);
+                        var child = importMeshImplObj(tpl.Item2, settings, assetName + "@" + tpl.Item1, null);
                         tpl.Item2.Dispose();
                         child.name = tpl.Item1;
                         child.transform.parent = go.transform;
@@ -509,7 +564,7 @@ public class Importer : IDisposable
     public void ImportWorldMesh(MeshLoadSettings settings)
     {
         using (var zmesh = zen!.mesh())
-            PrefabUtility.InstantiatePrefab(importMeshImpl(zmesh, settings, zen.Name));
+            PrefabUtility.InstantiatePrefab(importMeshImpl(zmesh, settings, zen.Name, null));
 
     }
 
@@ -526,7 +581,19 @@ public class Importer : IDisposable
     public void ImportMesh(string name, MeshLoadSettings settings)
     {
         using (var zmesh = new ZMesh(vdfs, name))
-            PrefabUtility.InstantiatePrefab(importMeshImpl(zmesh, settings, name));
+            PrefabUtility.InstantiatePrefab(importMeshImpl(zmesh, settings, name, null));
+    }
+
+    // TODO BLENDS
+    public void ImportMorph(string name, MeshLoadSettings settings)
+    {
+        using (var zmorph = new ZMorph(vdfs, name))
+        {
+            using (var zmesh = zmorph.mesh()) {
+                PrefabUtility.InstantiatePrefab(importMeshImpl(zmesh, settings, name, zmorph.blends()));
+            }
+
+        }
     }
 
     public void ImportSkeleton(string name) 

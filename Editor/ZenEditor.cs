@@ -12,6 +12,7 @@ public class ZenEditor : EditorWindow
         Skeleton,
         Skin,
         Animation,
+        Morph,
         Script
     }
 
@@ -66,6 +67,7 @@ public class ZenEditor : EditorWindow
     private Texture2D iconSkin;
     private Texture2D iconMesh;
     private Texture2D iconAnimation;
+    private Texture2D iconMorph;
     private Texture2D iconScript;
     private Texture2D iconRefresh;
     private Texture2D iconLeft;
@@ -93,6 +95,7 @@ public class ZenEditor : EditorWindow
         iconMesh =          loadIcon("icons/processed/unityengine/", "mesh icon.asset");
         iconSkin =          loadIcon("icons/processed/unityengine/", "skinnedmeshrenderer icon.asset");
         iconAnimation =     loadIcon("icons/processed/unityengine/", "animationclip icon.asset");
+        iconMorph =         loadIcon("icons/", "editcollider.png");
         iconScript =        loadIcon("icons/processed/unityengine/", "scriptableobject icon.asset");
         iconUnity =         loadIcon("icons/processed/unityeditor/", "sceneasset icon.asset");
         iconGothic =        loadIcon("Assets/", "g_icon.png");
@@ -178,6 +181,7 @@ public class ZenEditor : EditorWindow
             LoadMode.Skeleton => ".MDH",
             LoadMode.Skin => ".MDM",
             LoadMode.Animation => ".MAN",
+            LoadMode.Morph => ".MMB",
             LoadMode.Script => ".MDS",
             _ => "$$$$$$$$$$$$"
         };
@@ -479,15 +483,28 @@ public class ZenEditor : EditorWindow
 
         if (genLoadMode == LoadMode.Skin || genLoadMode == LoadMode.Animation)
             fileSkeleton = EditorGUILayout.TextField("Skeleton file", fileSkeleton).ToUpper();
+
+        bool barVertical = false;
+        var barWidth = 32 * 7;
+        var btnWidth = 32 * 4;
         
+        if (EditorGUIUtility.currentViewWidth < barWidth + btnWidth + 32*2) {
+            barVertical = true;
+            btnWidth = barWidth;
+        }
+
         EditorGUILayout.Space();
+
         GUILayout.BeginHorizontal();
 
         GUILayout.FlexibleSpace();
 
+        if (barVertical)
+            GUILayout.BeginVertical();
+
         genLoadMode = (LoadMode)GUILayout.Toolbar(
-            (int)genLoadMode, new Texture[] { iconTerrain, iconMesh, iconAvatar, iconSkin, iconAnimation, iconScript }, 
-            GUILayout.Height(24), GUILayout.Width(32*6));
+            (int)genLoadMode, new Texture[] { iconTerrain, iconMesh, iconAvatar, iconSkin, iconAnimation, iconMorph, iconScript }, 
+            GUILayout.Height(24), GUILayout.Width(barWidth));
         
         if (genLoadMode != genLoadModeOld)
         {
@@ -496,7 +513,7 @@ public class ZenEditor : EditorWindow
         }
         genLoadModeOld = genLoadMode;
 
-        GUILayout.Space(24);
+        GUILayout.Space(barVertical ? 4 : 24);
 
         if (GUILayout.Button(genLoadMode switch {
             LoadMode.World => "Load World", 
@@ -504,10 +521,14 @@ public class ZenEditor : EditorWindow
             LoadMode.Skeleton => "Load Skeleton",
             LoadMode.Skin => "Load Skin",
             LoadMode.Animation => "Load Animation",
+            LoadMode.Morph => "Load Morph",
             LoadMode.Script => "Load Script",
             _ => ""
-        }, GUILayout.Height(24), GUILayout.Width(32*4)))
+        }, GUILayout.Height(24), GUILayout.Width(btnWidth)))
             runLoad();
+
+        if (barVertical)
+            EditorGUILayout.EndVertical();
 
         GUILayout.FlexibleSpace();
         GUILayout.EndHorizontal();
@@ -656,15 +677,18 @@ public class ZenEditor : EditorWindow
             if (genLoadMode == LoadMode.Model)
                 imp.ImportMesh(fileSelected, settings);
             
-            if (genLoadMode == LoadMode.Skeleton) {
+            if (genLoadMode == LoadMode.Skeleton) 
                 imp.ImportSkeleton(fileSelected);
-            }
-            if (genLoadMode == LoadMode.Skin) {
+            
+            if (genLoadMode == LoadMode.Skin) 
                 imp.ImportSkin(fileSelected, fileSkeleton, settings);
-            }
-            if (genLoadMode == LoadMode.Animation) {
+            
+            if (genLoadMode == LoadMode.Animation) 
                 imp.ImportAnimation(fileSelected, fileSkeleton);
-            }
+            
+            if (genLoadMode == LoadMode.Morph) 
+                imp.ImportMorph(fileSelected, settings);
+            
             if (genLoadMode == LoadMode.Script) {
                 scriptData = imp.ImportScript(fileSelected);
                 scriptImportTree = true;

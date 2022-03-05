@@ -41,6 +41,9 @@ namespace ZenGlue {
         [DllImport("zenglue", CallingConvention = CallingConvention.Cdecl)]
         private static extern uint zg_mesh_submesh_element_get(IntPtr mesh, uint submesh, uint element);
 
+        [DllImport("zenglue", CallingConvention = CallingConvention.Cdecl)]
+        private static extern uint zg_mesh_vertexindex_get(IntPtr mesh, uint index);
+
         private IntPtr handle;
 
         public ZMesh(IntPtr nativeptr) {
@@ -104,7 +107,14 @@ namespace ZenGlue {
         public Color color(uint index) {
             uint c = zg_mesh_submesh_material_color(handle, index);
             return Common.uintToColor(c);
-        }      
+        }
+
+        public uint[] vertexIds() {
+            var result = new uint[zg_mesh_vertex_count(handle)];
+            for (uint i = 0; i < result.Length; ++i)
+                result[i] = zg_mesh_vertexindex_get(handle, i);
+            return result;
+        }
 
         public void Dispose() {
             zg_mesh_deinit(handle);
