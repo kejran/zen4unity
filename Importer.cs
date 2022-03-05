@@ -121,7 +121,7 @@ public class Importer : IDisposable
             return stored_mat;
 
         Texture2D? tex2d = null;
-        if (settings.loadTextures && texture.Contains(".TGA"))
+        if (settings.loadTextures && texture.Contains(".TGA")) // todo why is the tga part here? 
         {
             var compressed = texture.Replace(".TGA", "-C.TEX");
             tex2d = tryGetTexture(compressed);
@@ -142,6 +142,15 @@ public class Importer : IDisposable
         return mat;
     }
 
+    public Material MakeMaterial(string texture, MaterialLoadSettings settings) {
+        if (settings.loadTextures)
+            makeDir("Textures");    
+        makeDir("Materials");
+        
+        // todo clean up this extension mess
+        return makeMaterial(texture.Replace("-C.TEX", "").Replace(".TGA", "") + ".TGA", settings);
+    }
+
     Material[] makeMaterials(MaterialMesh zmesh, MaterialLoadSettings settings)
     {
         if (settings.loadTextures)
@@ -156,7 +165,7 @@ public class Importer : IDisposable
 
         return materials;
     }
-
+    
     private Mesh makeMesh(ZMesh zmesh)
     {
         var umesh = new Mesh();
@@ -561,6 +570,10 @@ public class Importer : IDisposable
         return (GameObject)PrefabUtility.InstantiatePrefab(prefab);
     }
 
+    public GameObject instantiate(GameObject prefab) {
+        return PrefabUtility.InstantiatePrefab(prefab) as GameObject;
+    }
+
     public void ImportWorldMesh(MeshLoadSettings settings)
     {
         using (var zmesh = zen!.mesh())
@@ -578,28 +591,24 @@ public class Importer : IDisposable
         r.waynet = zen!.data().waynet();
     }
 
-    public void ImportMesh(string name, MeshLoadSettings settings)
+    public GameObject ImportMesh(string name, MeshLoadSettings settings)
     {
         using (var zmesh = new ZMesh(vdfs, name))
-            PrefabUtility.InstantiatePrefab(importMeshImpl(zmesh, settings, name, null));
+            return instantiate(importMeshImpl(zmesh, settings, name, null));
     }
 
     // TODO BLENDS
-    public void ImportMorph(string name, MeshLoadSettings settings)
+    public GameObject ImportMorph(string name, MeshLoadSettings settings)
     {
         using (var zmorph = new ZMorph(vdfs, name))
-        {
-            using (var zmesh = zmorph.mesh()) {
-                PrefabUtility.InstantiatePrefab(importMeshImpl(zmesh, settings, name, zmorph.blends()));
-            }
-
-        }
+            using (var zmesh = zmorph.mesh()) 
+                return instantiate(importMeshImpl(zmesh, settings, name, zmorph.blends()));
     }
 
-    public void ImportSkeleton(string name) 
+    public GameObject ImportSkeleton(string name) 
     {
         using (var lib = new ZMeshLib(vdfs, name))
-            PrefabUtility.InstantiatePrefab(importSkeleton(lib, name));
+            return instantiate(importSkeleton(lib, name));
     }
 
     public string findSkin(string name) {
@@ -613,10 +622,10 @@ public class Importer : IDisposable
         return "";    
     }
 
-    public void ImportSkin(string name, string skeletonAsset, MeshLoadSettings settings) 
+    public GameObject ImportSkin(string name, string skeletonAsset, MeshLoadSettings settings) 
     {
         using (var lib = new ZMeshLib(vdfs, name))
-            PrefabUtility.InstantiatePrefab(importSkin(lib, skeletonAsset, name, settings));
+            return instantiate(importSkin(lib, skeletonAsset, name, settings));
     }
 
     public void ImportAnimation(string name, string skeletonAsset) 
