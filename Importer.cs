@@ -560,7 +560,7 @@ public class Importer : IDisposable
 
     private GameObject importDynamic(ZMeshLib lib, MeshLoadSettings settings, string assetName) 
     {
-        Debug.Log("HELLO " + assetName);
+
         var attached = lib.Attached();       
         var dict = new Dictionary<string, ZMesh>();
         foreach (var (name, mesh) in attached) {
@@ -570,11 +570,14 @@ public class Importer : IDisposable
             dict[name] = mesh;
         }
         
-        if (attached.Length > 1)
-            Debug.Log("Found one multi-mesh dynamic: " + assetName);
-
-        // use embedded skeleton directly
-        var skeleton = makeSkeleton(lib).Item1;
+        Transform skeleton;
+        if (lib.hasNodes()) // use embedded skeleton directly
+            skeleton = makeSkeleton(lib).Item1;
+        else // find the mdh file
+            using (var slib = new ZMeshLib(vdfs, 
+                System.IO.Path.GetFileNameWithoutExtension(assetName) + ".MDH")
+            )
+                skeleton = makeSkeleton(slib).Item1;
 
         bool assetCreated = false;
         void iter(Transform obj) {
