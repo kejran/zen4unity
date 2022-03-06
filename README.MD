@@ -23,16 +23,25 @@ Load entire level into a multi-material mesh asset.
 ### Skinned meshes
 Import bone hierarchies and skinned models that can be posed and animated.
 
+### Morph meshes
+Convert morphing meshes (Ranged weapons, heads) into meshes with defined blendshapes.
+
 ### Materials and textures
 All textures that loaded meshes depend on will be automatically extracted. A generic user material is cloned into separate materials for all textures - this way the importer should work with any rendering pipeline.
 
+### Animations
+All animations can be imported as separate clips, to use with matching hierarchies. 
+
 ### Modelscript import
-Modelscript files contain metadata that ties together hierarchies, meshes, animations, and effects related to a particular entity. Currently this allows for automatic binding of skinned meshes to bone hierarchies.
+Modelscript files contain metadata that ties together hierarchies, meshes, animations, and effects related to a particular entity. Currently this allows for automatic binding of skinned meshes to bone hierarchies and binding animations to skeleton.
 
 ### Vobs
 [Virtual Objects](https://regoth-project.github.io/REGoth-bs/case-studies/object-kinds.html) define a basic type of entity present in ZenGin. For our purposes, these represent a hierarchy of objects placed in the world - that is all vegetation, furniture, interactables, lights, trigger or audio zones, et cetera. 
 
 All Vobs that contain children or have a defined visual are imported into Unity hierarchy during a level load.  
+
+### Waynet
+Gothic uses a lightweight, graph-based navigation system. Nodes and edges are imported into a basic structure. Bring your own ai. 
 
 ### Prefabs
 All Vobs imported can be turned into prefabs. That way, after a level import a specific item can be given some additional functionality, and the change will be propagated through the whole level.
@@ -41,10 +50,8 @@ Prefabs are also used to define bone hierarchies, and skinned models that use th
 ## TODO
 The following features are planned for the future:
 - Interactive meshes
-- Animations
 - Animation events
 - Lights
-- Navigation graph
 
 ## Not in scope
 ### Daedalus
