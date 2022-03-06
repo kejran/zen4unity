@@ -571,7 +571,7 @@ public class ImportWindow : EditorWindow
 
 		EditorGUILayout.EndScrollView();
 
-		if (ui.bigButton("Load script"))
+		if (ui.bigButton("Load Files"))
 			using (var importer = new Importer("Assets/Gothic"))
 			{
 				importer.LoadArchives(vdfsPath, getSelectedArchives());
@@ -581,7 +581,7 @@ public class ImportWindow : EditorWindow
 				void tryImportSkin(string skin) {
 					var path = importer.findSkin(skin);
 					if (path != "")
-						importer.ImportSkin(path, skeleton, settings);
+						importer.ImportSkinOrDynamic(path, skeleton, settings);
 					else
 						Debug.LogWarningFormat("Failed to find skin [{0}]", skin);
 				}

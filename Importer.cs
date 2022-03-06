@@ -413,46 +413,69 @@ public class Importer : IDisposable
         }
     }
 
-    private GameObject importMeshImplObj(ZMesh zmesh, MeshLoadSettings settings, string assetName, ZMorph.Blend[]? morphs)
-    {
-        var folder = morphs == null ? "Meshes/Static" : "Meshes/Morphs"; 
+
+    private GameObject importMeshImplMorph(
+        ZMesh zmesh, MeshLoadSettings settings, string assetName, 
+        ZMorph.Blend[] morphs
+    ) {
+        var folder = "Meshes/Morphs"; 
         var umesh = makeMesh(zmesh);
         var path = pathJoin(root, folder, assetName + ".asset");
         makeDir(folder);
 
-        if (morphs != null) 
-        {
-            makeMorphs(umesh, zmesh.vertexIds(), morphs);
+        makeMorphs(umesh, zmesh.vertexIds(), morphs);
         
-            //hack around broken blenshapes, wtf????
-            //https://issuetracker.unity3d.com/issues/blendshapes-added-with-mesh-dot-addblendshapeframe-are-not-updated-correctly-when-modifying-the-offsets
-            umesh.vertices = umesh.vertices;
-        }
+        //hack around broken blenshapes, wtf????
+        //https://issuetracker.unity3d.com/issues/blendshapes-added-with-mesh-dot-addblendshapeframe-are-not-updated-correctly-when-modifying-the-offsets
+        umesh.vertices = umesh.vertices;
 
         AssetDatabase.CreateAsset(umesh, path);
 
         var go = new GameObject();
         go.name = assetName;
 
-        if (morphs != null) 
-        {
-            var smr = go.AddComponent<SkinnedMeshRenderer>();
-            smr.sharedMesh = umesh;
+        var smr = go.AddComponent<SkinnedMeshRenderer>();
+        smr.sharedMesh = umesh;
 
-            if (settings.loadMaterials)
-                smr.materials = makeMaterials(zmesh, settings.materialSettings);
-        } 
-        else 
-        {
-            var mf = go.AddComponent<MeshFilter>();
-            mf.mesh = umesh;
-
-            var mr = go.AddComponent<MeshRenderer>();
-            
-            if (settings.loadMaterials)
-                mr.materials = makeMaterials(zmesh, settings.materialSettings);
-        }
+        if (settings.loadMaterials)
+            smr.materials = makeMaterials(zmesh, settings.materialSettings);
  
+        return go;
+
+    }
+
+    private GameObject importMeshImplObj(
+        ZMesh zmesh, MeshLoadSettings settings, string assetName, 
+        bool addToExistingAsset, GameObject? existingParent
+    ) {
+        var folder = existingParent == null ? "Meshes/Static" : "Meshes/Dynamic"; 
+        // hack, do it in a clearer way
+        
+        var umesh = makeMesh(zmesh);
+        var path = pathJoin(root, folder, assetName + ".asset");
+        makeDir(folder);
+
+        if (addToExistingAsset)
+            AssetDatabase.AddObjectToAsset(umesh, path);
+        else
+            AssetDatabase.CreateAsset(umesh, path);
+
+        GameObject go;
+        if (existingParent == null) 
+        {
+            go = new GameObject();
+            go.name = assetName;
+        } else
+            go = existingParent;
+
+        var mf = go.AddComponent<MeshFilter>();
+        mf.mesh = umesh;
+
+        var mr = go.AddComponent<MeshRenderer>();
+        
+        if (settings.loadMaterials)
+            mr.materials = makeMaterials(zmesh, settings.materialSettings);
+
         return go;
     }
 
@@ -466,10 +489,16 @@ public class Importer : IDisposable
         return prefab;
     }
 
-    private GameObject importMeshImpl(ZMesh zmesh, MeshLoadSettings settings, string assetName, ZMorph.Blend[]? blends)
+    private GameObject importMeshImpl(ZMesh zmesh, MeshLoadSettings settings, string assetName)
     {
-        var go = importMeshImplObj(zmesh, settings, assetName, blends);
-        return packageAsPrefab(go, blends == null ? "Models/Static" : "Models/Morphs", assetName);
+        var go = importMeshImplObj(zmesh, settings, assetName, false, null);
+        return packageAsPrefab(go, "Models/Static", assetName);
+    }
+
+    private GameObject importMorph(ZMesh zmesh, MeshLoadSettings settings, string assetName, ZMorph.Blend[] blends)
+    {
+        var go = importMeshImplMorph(zmesh, settings, assetName, blends);
+        return packageAsPrefab(go, "Models/Morphs", assetName);
     }
 
     private GameObject[] importVOBs(VOB[] vobs, MeshLoadSettings settings)
@@ -487,14 +516,29 @@ public class Importer : IDisposable
             // if (vob.type() == VOB.Type.MobContainer)
             //     Debug.Log("CONTAINTER " + visual);
 
-            if (visual.EndsWith("3DS"))// || visual.EndsWith("ASC") || visual.EndsWith("MDS"))
+            if (visual.EndsWith("3DS"))// || visual.EndsWith("MDS"))
             {
                 var compressed = visual.Replace(".3DS", ".MRM");//.Replace(".ASC", ".MDL");
                 if (name == "")
                     name = "[" + vob.visual() + "]";
-                //.Replace(".ASC", "")
-                obj = getOrMakePrefab(compressed, visual.Replace(".3DS", ""), PrefabType.StaticMesh, settings);
+                //obj = getOrMakePrefab(compressed, name, PrefabType.StaticMesh, settings);
             }
+
+            else if (visual.EndsWith("ASC"))
+            {
+                var compressed = findSkin(visual);
+                if (name == "")
+                    name = "[" + vob.visual() + "]";
+                obj = getOrMakePrefab(compressed, name, PrefabType.DynamicMesh, settings);
+            }
+
+            else if (visual.EndsWith("PFX")) 
+            {
+                // todo: particle effect vobs
+            }
+            
+//            else if (visual != "") 
+//                Debug.LogWarning("Unknown visual type: " + visual);
 
             if (obj == null && children.Length > 0)
                 obj = new GameObject();
@@ -508,10 +552,53 @@ public class Importer : IDisposable
 
             if (obj != null && children.Length > 0)
                 foreach (var child in children)
-                    child.transform.parent = obj.transform;
+                    child.transform.SetParent(obj.transform, false);
 
         }
         return result.ToArray();
+    }
+
+    private GameObject importDynamic(ZMeshLib lib, MeshLoadSettings settings, string assetName) 
+    {
+        Debug.Log("HELLO " + assetName);
+        var attached = lib.Attached();       
+        var dict = new Dictionary<string, ZMesh>();
+        foreach (var (name, mesh) in attached) {
+            // should not happen, there are barely any hierarchies...
+            if (dict.ContainsKey(name))
+                Debug.LogWarning("Dropping duplicate attached mesh for bone: " + name);
+            dict[name] = mesh;
+        }
+        
+        if (attached.Length > 1)
+            Debug.Log("Found one multi-mesh dynamic: " + assetName);
+
+        // use embedded skeleton directly
+        var skeleton = makeSkeleton(lib).Item1;
+
+        bool assetCreated = false;
+        void iter(Transform obj) {
+            if (dict.TryGetValue(obj.name, out var mesh))  
+            {
+                dict.Remove(obj.name);
+                importMeshImplObj(mesh, settings, assetName, assetCreated, obj.gameObject);
+                assetCreated = true;
+            } 
+            for (int i = 0; i < obj.childCount; ++i)
+                iter(obj.GetChild(i));
+        }
+        iter(skeleton);
+
+        foreach(var (name, mesh) in dict)
+            Debug.LogWarning("Found non-attached mesh " + name + " in " + assetName);
+
+        foreach (var (name, mesh) in attached)
+            mesh.Dispose();
+
+        var go = new GameObject(assetName);
+        skeleton.SetParent(go.transform, false);
+
+        return packageAsPrefab(go, "Models/Dynamic", assetName);
     }
 
     private GameObject getOrMakePrefab(string visual, string assetName, PrefabType type, MeshLoadSettings settings)
@@ -522,62 +609,35 @@ public class Importer : IDisposable
         {
             if (type == PrefabType.StaticMesh) // MRM
                 using (var zmesh = new ZMesh(vdfs, visual))
-                    prefab = importMeshImpl(zmesh, settings, assetName, null);
+                    prefab = importMeshImpl(zmesh, settings, assetName);
 
-            if (type == PrefabType.Skeleton) {
+            if (type == PrefabType.Skeleton) 
                 using (var lib = new ZMeshLib(vdfs, visual)) { // MDl, MDH
                     prefab = importSkeleton(lib, assetName);
-                }
             }
 
-            if (visual.EndsWith("MDL-dummy-will-fix-later-stop-complaining-aboud-dead-code"))
+            if (type == PrefabType.DynamicMesh) // MDL ?
             {
-                var go = new GameObject(assetName);
                 using (var lib = new ZMeshLib(vdfs, visual))
-                {
-                    var attached = lib.Attached();
-
-                    var dict = new Dictionary<string, GameObject>();
-                    foreach (var tpl in attached)
-                    {
-                        // Debug.Log(assetName + "@" + tpl.Item1);
-                        var child = importMeshImplObj(tpl.Item2, settings, assetName + "@" + tpl.Item1, null);
-                        tpl.Item2.Dispose();
-                        child.name = tpl.Item1;
-                        child.transform.parent = go.transform;
-                        dict.Add(tpl.Item1, child);
-                    }
-                    void iterateNodes(GameObject parent, ZMeshLib.NodeInfo nodes)
-                    {
-                        foreach (var node in nodes.asTree) {
-                            GameObject go;
-                            if (node.name != "" && dict.ContainsKey(node.name))
-                                go = dict[node.name];
-                            else
-                                go = new GameObject();
-                            go.transform.parent = parent.transform;
-                            go.name = node.name == "" ? "UNNAMED" : node.name;
-                            go.transform.localPosition = node.transform.MultiplyPoint(Vector3.zero);
-                            go.transform.localRotation = node.transform.rotation;
-                        }
-                    }
-                    iterateNodes(go, lib.Nodes());
-                }
-                prefab = packageAsPrefab(go, "TODO", assetName);
+                    prefab = importDynamic(lib, settings, assetName);
             }
-
         }
+
         return (GameObject)PrefabUtility.InstantiatePrefab(prefab);
     }
 
     public GameObject instantiate(GameObject prefab) {
-        return PrefabUtility.InstantiatePrefab(prefab) as GameObject;
+        var result = PrefabUtility.InstantiatePrefab(prefab) as GameObject;
+        if (result == null)
+            throw new Exception("Failed to instantiate prefab");
+        else
+            return result;
     }
 
     public void ImportWorldMesh(MeshLoadSettings settings)
     {
         using (var zmesh = zen!.mesh())
-            PrefabUtility.InstantiatePrefab(importMeshImpl(zmesh, settings, zen.Name, null));
+            PrefabUtility.InstantiatePrefab(importMeshImpl(zmesh, settings, zen.Name));
 
     }
 
@@ -594,15 +654,20 @@ public class Importer : IDisposable
     public GameObject ImportMesh(string name, MeshLoadSettings settings)
     {
         using (var zmesh = new ZMesh(vdfs, name))
-            return instantiate(importMeshImpl(zmesh, settings, name, null));
+            return instantiate(importMeshImpl(zmesh, settings, name));
     }
 
-    // TODO BLENDS
     public GameObject ImportMorph(string name, MeshLoadSettings settings)
     {
         using (var zmorph = new ZMorph(vdfs, name))
             using (var zmesh = zmorph.mesh()) 
-                return instantiate(importMeshImpl(zmesh, settings, name, zmorph.blends()));
+                return instantiate(importMeshImplMorph(zmesh, settings, name, zmorph.blends()));
+    }
+
+    public GameObject ImportDynamic(string name, MeshLoadSettings settings)
+    {
+        using (var lib = new ZMeshLib(vdfs, name))
+            return instantiate(importDynamic(lib, settings, name));
     }
 
     public GameObject ImportSkeleton(string name) 
@@ -626,6 +691,17 @@ public class Importer : IDisposable
     {
         using (var lib = new ZMeshLib(vdfs, name))
             return instantiate(importSkin(lib, skeletonAsset, name, settings));
+    }
+
+    public GameObject ImportSkinOrDynamic(string name, string skeletonAsset, MeshLoadSettings settings) 
+    {
+        using (var lib = new ZMeshLib(vdfs, name)) 
+        {
+            if (lib.hasAttachments())
+                return instantiate(importDynamic(lib, settings, name));
+            else
+                return instantiate(importSkin(lib, skeletonAsset, name, settings));
+        }
     }
 
     public void ImportAnimation(string name, string skeletonAsset) 

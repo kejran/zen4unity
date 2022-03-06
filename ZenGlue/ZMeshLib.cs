@@ -48,13 +48,28 @@ namespace ZenGlue
         private static extern IntPtr zg_skinnedmesh_init(IntPtr lib);
         
 
-    private IntPtr handle;
+        private IntPtr handle;
 
         public ZMeshLib(VDFS archive, string name)
         {
             handle = zg_meshlib_init(archive.NativeHandle(), name);
         }
     
+        public bool hasNodes() 
+        {
+            return zg_meshlib_node_count(handle) > 0;
+        }
+
+        // public bool hasSkin() 
+        // {
+        //     return zg_meshlib_(handle) > 0;
+        // }
+
+        public bool hasAttachments() 
+        {
+            return zg_meshlib_attached_count(handle) > 0;
+        }
+
         public Tuple<string, ZMesh>[] Attached()
         {
             var count = zg_meshlib_attached_count(handle);
