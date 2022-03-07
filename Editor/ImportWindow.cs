@@ -42,7 +42,10 @@ public class ImportWindow : EditorWindow
 	public bool worldLoadMesh = true;
 	public bool worldLoadWaynet = true;
 	public bool worldLoadVOBs = true;
-	public bool worldNestVOBs = true;
+	//public bool worldNestVOBs = true;
+	public bool worldLoadStatic = true;
+	public bool worldLoadStructural = true;
+	public bool worldLoadScripts = true;
 
 	private bool meshShow = true;
 	public bool meshCreatePrefab = true;
@@ -288,8 +291,11 @@ public class ImportWindow : EditorWindow
 			EditorGUI.BeginDisabledGroup(!worldLoadVOBs);
 			EditorGUILayout.LabelField("VOB settings", EditorStyles.boldLabel);
 			++EditorGUI.indentLevel;
-			worldNestVOBs = EditorGUILayout.ToggleLeft("Import Hierarchy", worldNestVOBs);
-			worldNestVOBs = EditorGUILayout.ToggleLeft("Import Visuals", worldNestVOBs);
+			//worldNestVOBs = EditorGUILayout.ToggleLeft("Import Hierarchy", worldNestVOBs);
+			worldLoadStatic = EditorGUILayout.ToggleLeft("Import Static", worldLoadStatic);
+			worldLoadStructural = EditorGUILayout.ToggleLeft("Import Structural", worldLoadStructural);
+			worldLoadScripts = EditorGUILayout.ToggleLeft("Import Scripts", worldLoadScripts);
+
 			--EditorGUI.indentLevel;
 			EditorGUI.EndDisabledGroup();
 			--EditorGUI.indentLevel;
@@ -686,7 +692,13 @@ public class ImportWindow : EditorWindow
 				if (worldLoadMesh)
 					imp.ImportWorldMesh(settings);
 				if (worldLoadVOBs)
-					imp.ImportVobs(settings);
+				{
+					var pSettings = new Importer.PrefabLoadSettings();
+					pSettings.loadStatic = worldLoadStatic;
+					pSettings.loadStructural = worldLoadStructural;
+					pSettings.loadScripts = worldLoadScripts;
+					imp.ImportVobs(settings, pSettings);
+				}
 				if (worldLoadWaynet)
 					imp.ImportWaynet();
 				break;

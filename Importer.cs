@@ -60,6 +60,13 @@ public class Importer : IDisposable
         public bool loadTextures;
     }
 
+    public struct PrefabLoadSettings
+    {
+        public bool loadStatic;
+        public bool loadScripts;
+        public bool loadStructural;
+    }
+
     public void LoadWorld(string world, bool forceG2)
     {
         if (zen != null) zen.Dispose();
@@ -515,12 +522,12 @@ public class Importer : IDisposable
         return packageAsPrefab(go, "Models/Morphs", visual);
     }
 
-    private GameObject[] importVOBs(ZVOB[] vobs, MeshLoadSettings settings)
+    private GameObject[] importVOBs(ZVOB[] vobs, MeshLoadSettings sMesh, PrefabLoadSettings sPrefab)
     {
         var result = new List<GameObject>();
         foreach (var vob in vobs)
         {
-            var children = importVOBs(vob.children(), settings);
+            var children = importVOBs(vob.children(), sMesh, sPrefab);
 
             GameObject? obj = null;
             var name = vob.name();
@@ -530,28 +537,34 @@ public class Importer : IDisposable
             if (name == "" && visual != "")
                 name = visual;
 
-            // if (vob.type() == VOB.Type.MobContainer)
-            //     Debug.Log("CONTAINTER " + visual);
-
             if (visual.EndsWith("3DS")) 
             {
-                // obj = getOrMakePrefab(visual, PrefabType.StaticMesh, settings);
-                // if (obj == null)
-                //     Debug.LogWarning("Could not find " + visual);
+                if (sPrefab.loadStatic) 
+                {
+                    obj = getOrMakePrefab(visual, PrefabType.StaticMesh, sMesh);
+                    if (obj == null)
+                        Debug.LogWarning("Could not find " + visual);
+                }
             }
 
             else if (visual.EndsWith("ASC")) 
             {
-                // obj = getOrMakePrefab(visual, PrefabType.DynamicMesh, settings);
-                // if (obj == null)
-                //     Debug.LogWarning("Could not find " + visual);
+                if (sPrefab.loadStructural) 
+                {
+                    obj = getOrMakePrefab(visual, PrefabType.DynamicMesh, sMesh);
+                    if (obj == null)
+                        Debug.LogWarning("Could not find " + visual);
+                }
             }
 
             else if (visual.EndsWith("MDS"))
             {
-                obj = getOrMakePrefab(visual, PrefabType.ModelScript, settings);
-                if (obj == null)
-                    Debug.LogWarning("Could not find " + visual);
+                if (sPrefab.loadScripts)
+                {
+                    obj = getOrMakePrefab(visual, PrefabType.ModelScript, sMesh);
+                    if (obj == null)
+                        Debug.LogWarning("Could not find " + visual);
+                }
             }
 
             else if (visual.EndsWith("PFX"))
@@ -578,7 +591,7 @@ public class Importer : IDisposable
 
             var isLockable = vob.type() == ZVOB.Type.MobDoor || vob.type() == ZVOB.Type.MobContainer;
 
-            if (vob.type() == ZVOB.Type.MobInter || isLockable) 
+            if ((vob.type() == ZVOB.Type.MobInter || isLockable) && obj != null) // todo hack to skip unselected objects, improve later
             {
                 if (obj == null)
                     obj = new GameObject();
@@ -773,8 +786,8 @@ public class Importer : IDisposable
 
     }
 
-    public void ImportVobs(MeshLoadSettings settings) {
-        importVOBs(zen!.data().vobs(), settings);
+    public void ImportVobs(MeshLoadSettings sMesh, PrefabLoadSettings sPrefab) {
+        importVOBs(zen!.data().vobs(), sMesh, sPrefab);
     }
 
     public void ImportWaynet() {
