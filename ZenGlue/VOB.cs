@@ -41,6 +41,18 @@ namespace ZenGlue
         [DllImport("zenglue", CallingConvention = CallingConvention.Cdecl)]
         private static extern float zg_vob_light_range(IntPtr vob);
 
+        [DllImport("zenglue", CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr zg_vob_container_contents(IntPtr vob);
+
+        [DllImport("zenglue", CallingConvention = CallingConvention.Cdecl)]
+        private static extern uint zg_vob_lock_locked(IntPtr vob);
+
+        [DllImport("zenglue", CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr zg_vob_lock_key(IntPtr vob);
+
+        [DllImport("zenglue", CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr zg_vob_lock_code(IntPtr vob);
+
         public enum Type {
             Vob,
             VobLevelCompo,
@@ -126,6 +138,22 @@ namespace ZenGlue
         }
         public float lightRange() {
             return zg_vob_light_range(handle) * 0.01f;
+        }
+
+        public string containerContents() {
+            return Marshal.PtrToStringAnsi(zg_vob_container_contents(handle));
+        }
+
+        public bool locked() {
+            return zg_vob_lock_locked(handle) > 0;
+        }
+
+        public string lockKey() {
+            return Marshal.PtrToStringAnsi(zg_vob_lock_key(handle));
+        }
+
+        public string lockCode() {
+            return Marshal.PtrToStringAnsi(zg_vob_lock_code(handle));
         }
 
     }

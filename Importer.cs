@@ -549,8 +549,9 @@ public class Importer : IDisposable
 
             else if (visual.EndsWith("MDS"))
             {
-                Debug.Log(visual);
                 obj = getOrMakePrefab(visual, PrefabType.ModelScript, settings);
+                if (obj == null)
+                    Debug.LogWarning("Could not find " + visual);
             }
 
             else if (visual.EndsWith("PFX"))
@@ -574,6 +575,41 @@ public class Importer : IDisposable
             // make dummy objects for holding children
             if (obj == null && children.Length > 0)
                 obj = new GameObject();
+
+            var isLockable = vob.type() == ZVOB.Type.MobDoor || vob.type() == ZVOB.Type.MobContainer;
+
+            if (vob.type() == ZVOB.Type.MobInter || isLockable) 
+            {
+                if (obj == null)
+                    obj = new GameObject();
+                var inter = obj.AddComponent<zen4unity.Vob.Interactable>();
+                //inter.requiredItem = 
+
+                if (isLockable && vob.locked()) // looks like there is one chest with set code and locked = false in g1? 
+                {
+                    var lockable = obj.AddComponent<zen4unity.Vob.Lockable>();
+                    lockable.lockCode = vob.lockCode();
+                    lockable.keyId = vob.lockKey();
+                }
+
+                if (vob.type() == ZVOB.Type.MobContainer) 
+                {
+                    var container = obj.AddComponent<zen4unity.Vob.Container>();
+                    
+                    var items = new List<zen4unity.Vob.Container.Stack>();
+                    var item = new zen4unity.Vob.Container.Stack();
+                    var itemString = vob.containerContents();
+                    if (itemString != "")
+                        foreach (var str in itemString.Split(new char[] {',', '.', ';'})) 
+                        {
+                            var split = str.Split(':');
+                            item.id = split[0];
+                            item.count = split.Length > 1 ? UInt32.Parse(split[1]) : 1;
+                            items.Add(item);
+                        }
+                    container.items = items.ToArray();
+                }
+            }
 
             if (obj != null)
             {
