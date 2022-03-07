@@ -1,9 +1,10 @@
 using System;
 using System.Runtime.InteropServices;
+using UnityEngine;
 
 namespace ZenGlue
 {
-    public class VOB {
+    public class ZVOB {
         [DllImport("zenglue", CallingConvention = CallingConvention.Cdecl)]
         private static extern uint zg_vobs_count(IntPtr vobarray);
 
@@ -72,16 +73,16 @@ namespace ZenGlue
             TouchDamage
         };
 
-        internal static VOB[] constructVOBArray(IntPtr ptr) {
+        internal static ZVOB[] constructVOBArray(IntPtr ptr) {
             var count = zg_vobs_count(ptr);
-            var result = new VOB[count];
+            var result = new ZVOB[count];
             for (uint i = 0; i < count; ++i)
-                result[i] = new VOB(zg_vobs_get(ptr, i));
+                result[i] = new ZVOB(zg_vobs_get(ptr, i));
             return result;
         }
 
         private IntPtr handle;
-        public VOB(IntPtr ptr) { handle = ptr; }
+        public ZVOB(IntPtr ptr) { handle = ptr; }
 
         public string name() {
             var name_p = zg_vob_name(handle);
@@ -93,7 +94,7 @@ namespace ZenGlue
             return Marshal.PtrToStringAnsi(name_p);
         }
 
-        public VOB[] children() {
+        public ZVOB[] children() {
             var arr = zg_vob_children(handle);
             return constructVOBArray(arr);
         }
@@ -102,7 +103,7 @@ namespace ZenGlue
             return (Type)zg_vob_type(handle);
         }
 
-        public UnityEngine.Vector3 position() {
+        public Vector3 position() {
             return zg_vob_position(handle).toUnityAbsolute();
         }
 

@@ -92,9 +92,9 @@ namespace ZenGlue {
             public WorldData(IntPtr ptr) {
                 handle = ptr;
             }
-            public VOB[] vobs() {
+            public ZVOB[] vobs() {
                 var vobArray = zg_zen_data_vobs(handle);
-                return VOB.constructVOBArray(vobArray);
+                return ZVOB.constructVOBArray(vobArray);
             }
 
             public Waynet waynet() {

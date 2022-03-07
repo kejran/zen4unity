@@ -21,7 +21,8 @@ public class Importer : IDisposable
         StaticMesh,
         Skeleton,
         SkinnedMesh,
-        DynamicMesh
+        DynamicMesh,
+        ModelScript
     }
 
     public Importer(string assetRoot = "") {
@@ -514,7 +515,7 @@ public class Importer : IDisposable
         return packageAsPrefab(go, "Models/Morphs", visual);
     }
 
-    private GameObject[] importVOBs(VOB[] vobs, MeshLoadSettings settings)
+    private GameObject[] importVOBs(ZVOB[] vobs, MeshLoadSettings settings)
     {
         var result = new List<GameObject>();
         foreach (var vob in vobs)
@@ -534,22 +535,24 @@ public class Importer : IDisposable
 
             if (visual.EndsWith("3DS")) 
             {
-                obj = getOrMakePrefab(visual, PrefabType.StaticMesh, settings);
-                if (obj == null)
-                    Debug.LogWarning("Could not find " + visual);
+                // obj = getOrMakePrefab(visual, PrefabType.StaticMesh, settings);
+                // if (obj == null)
+                //     Debug.LogWarning("Could not find " + visual);
             }
 
-            else if (visual.EndsWith("ASC"))
+            else if (visual.EndsWith("ASC")) 
             {
-                obj = getOrMakePrefab(visual, PrefabType.DynamicMesh, settings);
-                if (obj == null)
-                    Debug.LogWarning("Could not find " + visual);
+                // obj = getOrMakePrefab(visual, PrefabType.DynamicMesh, settings);
+                // if (obj == null)
+                //     Debug.LogWarning("Could not find " + visual);
             }
 
             else if (visual.EndsWith("MDS"))
             {
-                // todo: modelscript vobs
+                Debug.Log(visual);
+                obj = getOrMakePrefab(visual, PrefabType.ModelScript, settings);
             }
+
             else if (visual.EndsWith("PFX"))
             {
                 // todo: particle effect vobs
@@ -560,8 +563,13 @@ public class Importer : IDisposable
                 // todo: textured quads ? find out what this is
             }
 
-//            else if (visual != "")
-//                Debug.LogWarning("Unknown visual type: " + visual);
+            else if (visual.EndsWith("MMS"))
+            {
+                // todo: directly import morph (waving water plant in g1)
+            }
+
+            else if (visual != "")
+                Debug.LogWarning("Unknown visual type: " + visual);
 
             // make dummy objects for holding children
             if (obj == null && children.Length > 0)
@@ -584,7 +592,7 @@ public class Importer : IDisposable
         return result.ToArray();
     }
 
-    private GameObject importDynamic(ZMeshLib lib, MeshLoadSettings settings, string visual)
+    private GameObject importDynamic(ZMeshLib lib, MeshLoadSettings settings, string visual, string skeletonHint = "")
     {
         visual = Path.GetFileNameWithoutExtension(visual);
         var attached = lib.Attached();
@@ -601,7 +609,7 @@ public class Importer : IDisposable
             skeleton = makeSkeleton(lib).Item1; // todo this probably should not be embedded; we want a rig?
         else
         {
-            var skPath = findSkeleton(visual);
+            var skPath = findSkeleton(skeletonHint != "" ? skeletonHint : visual);
             if (skPath == "")
                 throw new Exception("Failed to find skeleton for " + visual); // this should not happen with sane files
             using (var slib = new ZMeshLib(vdfs, skPath))
@@ -634,6 +642,33 @@ public class Importer : IDisposable
         return packageAsPrefab(go, "Models/Dynamic", visual);
     }
 
+    private GameObject? importScriptModel(ZScript script, MeshLoadSettings settings, string visual) {
+
+        // todo: animator controller and custom script to handle states
+
+        visual = Path.GetFileNameWithoutExtension(visual);
+
+        var mt = script.meshTree();
+        if (mt == "")
+            return null;
+
+        var skin = findSkin(mt);
+        if (skin == "")
+            return null;
+
+        GameObject go;
+        using (var lib = new ZMeshLib(vdfs, skin))
+            go = instantiate(importDynamic(lib, settings, visual));
+
+        // ignore registered meshes?
+        foreach (var r in script.registeredMeshes())
+            Debug.LogWarning("Interactable " + visual + " has a registered mesh: " + r);
+        // ignore anims for now        
+        //var anims = zscript.getAnis();
+        
+        return packageAsPrefab(go, "Models/Scripts", visual);
+    }
+
     private GameObject? getOrMakePrefab(string visual, PrefabType type, MeshLoadSettings settings)
     {
         var subdir = type switch {
@@ -641,6 +676,7 @@ public class Importer : IDisposable
             PrefabType.StaticMesh => "Models/Static",
             PrefabType.SkinnedMesh => "Models/Skins",
             PrefabType.DynamicMesh => "Models/Dynamic",
+            PrefabType.ModelScript => "Models/Scripts",
             _ => ""
         };
 
@@ -673,6 +709,14 @@ public class Importer : IDisposable
                 using (var lib = new ZMeshLib(vdfs, file))
                     prefab = importDynamic(lib, settings, visual);
             }
+            if (type == PrefabType.ModelScript) // MDS, MSB
+            {
+                var file = findScript(visual);
+                if (file == "")
+                    return null;
+                using (var script = new ZScript(vdfs, file))
+                    prefab = importScriptModel(script, settings, visual);
+            }
         }
 
         return (GameObject)PrefabUtility.InstantiatePrefab(prefab);
@@ -699,7 +743,7 @@ public class Importer : IDisposable
 
     public void ImportWaynet() {
         var go = new GameObject();
-        var r = go.AddComponent<WaynetRenderer>();
+        var r = go.AddComponent<zen4unity.WaynetRenderer>();
         r.waynet = zen!.data().waynet();
     }
 
@@ -750,6 +794,17 @@ public class Importer : IDisposable
         return "";
     }
 
+    public string findScript(string name) {
+        var n = Path.GetFileNameWithoutExtension(name);
+        var msb = n + ".MSB";
+        var mds = n + ".MDS";
+        if (vdfs.Exists(msb))
+            return msb;
+        if (vdfs.Exists(mds))
+            return mds;
+        return "";
+    }
+
     public GameObject? ImportSkin(string name, string skeletonAsset, MeshLoadSettings settings)
     {
         if (!vdfs.Exists(name))
@@ -771,7 +826,7 @@ public class Importer : IDisposable
         using (var lib = new ZMeshLib(vdfs, name))
         {
             if (lib.hasAttachments())
-                return instantiate(importDynamic(lib, settings, name));
+                return instantiate(importDynamic(lib, settings, name, skeletonAsset));
             else
             {
                 var skin = importSkin(lib, skeletonAsset, name, settings);
