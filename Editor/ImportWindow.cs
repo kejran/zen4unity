@@ -700,7 +700,7 @@ public class ImportWindow : EditorWindow
 				break;
 
 			case LoadMode.Skin:
-				imp.ImportSkin(fileSelected, fileSkeleton, settings);
+				imp.ImportSkinOrDynamic(fileSelected, fileSkeleton, settings);
 				break;
 
 			case LoadMode.Animation:
