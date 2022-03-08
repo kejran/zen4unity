@@ -781,9 +781,12 @@ public class Importer : IDisposable
 
     public void ImportWorldMesh(MeshLoadSettings settings)
     {
-        using (var zmesh = zen!.mesh())
+        var zmesh = zen!.mesh();
+        if (zmesh != null)
+        {
             PrefabUtility.InstantiatePrefab(importMeshImpl(zmesh, settings, zen.Name));
-
+            zmesh.Dispose();
+        }
     }
 
     public void ImportVobs(MeshLoadSettings sMesh, PrefabLoadSettings sPrefab) {

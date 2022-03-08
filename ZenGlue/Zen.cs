@@ -83,7 +83,9 @@ namespace ZenGlue {
 
         public ZMesh mesh() {
             var ptr = zg_zen_mesh(handle);
-            return new ZMesh(ptr);
+            if (ptr != IntPtr.Zero)
+                return new ZMesh(ptr);
+            else return null;
         }
 
         public class WorldData
