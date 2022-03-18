@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-//using System.IO;
 using System.Linq;
 
 using UnityEditor;
@@ -136,7 +135,8 @@ public class Importer : IDisposable
             tex2d = tryGetTexture(compressed);
         }
 
-        var useTransparent = settings.loadTextures && tex2d != null && tex2d.format == TextureFormat.DXT5;
+        var useTransparent = settings.loadTextures && tex2d != null && (
+            tex2d.format == TextureFormat.DXT5 || tex2d.format == TextureFormat.RGBA32);
         var baseMaterial = useTransparent ? settings.transparentMaterialTemplate : settings.opaqueMaterialTemplate;
 
         if (baseMaterial == null) throw new Exception("Base material was not provided");
@@ -227,7 +227,7 @@ public class Importer : IDisposable
             var go = new GameObject(n.name);
             var t = go.transform;
             if (parent != null)
-                t.parent = parent;
+                t.SetParent(parent);
             setTransform(t, n.transform);
             all[n.index] = t;
             iterNodes(t, all, n.children);
@@ -235,28 +235,68 @@ public class Importer : IDisposable
         }).ToArray();
     }
 
-    private Tuple<Transform, Transform[]> makeSkeleton(ZMeshLib lib) {
+    private Tuple<Transform, Transform[]> makeSkeleton(ZMeshLib lib, bool insertRoot, string idleHint) {
         var nodeInfo = lib.Nodes();
         var nodes = nodeInfo.asTree;
         var arr = new Transform[nodeInfo.asArray.Length];
+
+        // it is useful to error if the tree is empty even with wrapper, since it should never happen
         if (nodes.Length == 0)
             throw new Exception("No root nodes found");
-        if (nodes.Length > 1) {
-            var s = "Expected 1 root node, got: [" + nodes[0].name;
-            foreach (var nn in nodes.Skip(1))
-                s += ", " + nn.name;
-            throw new Exception(s + "]");
+        if (!insertRoot)
+            if (nodes.Length > 1) {
+                var s = "Expected 1 root node, got: [" + nodes[0].name;
+                foreach (var nn in nodes.Skip(1))
+                    s += ", " + nn.name;
+                throw new Exception(s + "]");
+            }
+        // todo: this can be done more clearly, most likely...
+        var newParent = insertRoot ? new GameObject().transform : null;
+        var res = iterNodes(newParent, arr, nodes);
+        
+        if (insertRoot && idleHint != "")
+        {
+            var file = findIdleAnim(idleHint);
+            if (file != "") 
+                using (var ani = new ZAni(vdfs, file))
+                {
+                    var indices = ani.nodeIndices();
+                    uint root = 0xffff;
+                    for (uint i = 0; i < indices.Length; ++i)
+                        if (indices[i] == 0)
+                            root = i;
+                    if (root != 0xffff)
+                    {
+                        var pose = ani.packedSamples()[root];
+                        res[0].position = pose.position; 
+                        // todo: maybe add rotation? probably not useful
+                    }
+                }
         }
-        var res = iterNodes(null, arr, nodes);
-        return Tuple.Create(res[0], arr);
+
+        return Tuple.Create(newParent != null ? newParent : res[0], arr);
     }
 
-    private GameObject importSkeleton(ZMeshLib lib, string assetName)
+    private string findIdleAnim(string visual) 
     {
-        var path = pathJoin(root, "Avatars", assetName + ".asset");
-        var (rootBone, allBones) = makeSkeleton(lib);
+        visual = Path.GetFileNameWithoutExtension(visual);
+        var candidates = new string[]{"S_RUN", "S_FISTRUN", "S_S0"};
+        foreach (var c in candidates)
+        {
+            var file = visual + "-" + c + ".MAN";
+            if (vdfs.Exists(file))
+                return file;
+        }
+        return "";
+    }
+
+    private GameObject importSkeleton(ZMeshLib lib, string visual, bool insertRoot)
+    {
+        visual = Path.GetFileNameWithoutExtension(visual);
+        var path = pathJoin(root, "Avatars", visual + ".asset");
+        var (rootBone, allBones) = makeSkeleton(lib, insertRoot, visual);
         var go = rootBone.gameObject;
-        var avatar = AvatarBuilder.BuildGenericAvatar(go, "");
+        var avatar = AvatarBuilder.BuildGenericAvatar(go, rootBone.name); // dummy root ? or the bip?
         makeDir("Avatars");
         AssetDatabase.CreateAsset(avatar, path);
 
@@ -266,7 +306,7 @@ public class Importer : IDisposable
         var rend = go.AddComponent<SkinnedMeshRenderer>();
         rend.bones = allBones;
 
-        return packageAsPrefab(go, "Rigs", assetName);
+        return packageAsPrefab(go, "Rigs", visual);
     }
 
     private GameObject? importSkin(ZMeshLib lib, string skeleton, string visual, MeshLoadSettings settings)
@@ -309,7 +349,7 @@ public class Importer : IDisposable
         return true;
     }
 
-    private void importAnimation(ZAni zani, string skeleton, string assetName)
+    private void importAnimation(ZAni zani, string skeleton, string assetName, bool dummyRoot)
     {
         var go = getOrMakePrefab(skeleton, PrefabType.Skeleton, new MeshLoadSettings());
         if (go == null)
@@ -343,7 +383,15 @@ public class Importer : IDisposable
 
         var skin = go.GetComponent<SkinnedMeshRenderer>();
 
+        AnimationCurve? rootMotionX = null;
+        AnimationCurve? rootMotionZ = null;
+        
+        var animationRoot = dummyRoot ? go.transform.GetChild(0) : go.transform;
+
+        Debug.Log(zani.layer());
+        // iterate for all (except dummy root)
         for (uint node = 0; node < nodes.Length; ++node) {
+//            Debug.Log(nodes[node]);
             var t = skin.bones[nodes[node]];
             var rel = AnimationUtility.CalculateTransformPath(t, go.transform);
 
@@ -352,7 +400,24 @@ public class Importer : IDisposable
                 curves[i] = new AnimationCurve();
 
             var translation0 = samples[node].position;
-            bool encodeTranslation = false;
+            bool encodeTranslation = true;//false; //todo test it
+            bool isRoot = t == animationRoot;
+            void setCurve(string name, AnimationCurve curve) {
+                if (isRoot && dummyRoot)
+                {
+                    if (name == "localPosition.x")
+                    {
+                        rootMotionX = curve;
+                        return;
+                    }
+                    if (name == "localPosition.z")
+                    {
+                        rootMotionZ = curve;
+                        return;
+                    }
+                }
+                ani.SetCurve(rel, typeof(Transform), name, curve);
+            }
 
             for (uint s = 0; s < frames; ++s) {
                 var sample = samples[nodes.Length * s + node];
@@ -373,25 +438,30 @@ public class Importer : IDisposable
 
             if (encodeTranslation)
             {
-                ani.SetCurve(rel, typeof(Transform), "localPosition.x", curves[0]);
-                ani.SetCurve(rel, typeof(Transform), "localPosition.y", curves[1]);
-                ani.SetCurve(rel, typeof(Transform), "localPosition.z", curves[2]);
+                setCurve("localPosition.x", curves[0]);
+                setCurve("localPosition.y", curves[1]);
+                setCurve("localPosition.z", curves[2]);
             } else
             {
                 float end = invFps * (frames - 1);
-                ani.SetCurve(rel, typeof(Transform), "localPosition.x", AnimationCurve.Constant(0, end, translation0.x));
-                ani.SetCurve(rel, typeof(Transform), "localPosition.y", AnimationCurve.Constant(0, end, translation0.y));
-                ani.SetCurve(rel, typeof(Transform), "localPosition.z", AnimationCurve.Constant(0, end, translation0.z));
+                setCurve("localPosition.x", AnimationCurve.Constant(0, end, translation0.x));
+                setCurve("localPosition.y", AnimationCurve.Constant(0, end, translation0.y));
+                setCurve("localPosition.z", AnimationCurve.Constant(0, end, translation0.z));
             }
 
-            ani.SetCurve(rel, typeof(Transform), "localRotation.x", curves[3]);
-            ani.SetCurve(rel, typeof(Transform), "localRotation.y", curves[4]);
-            ani.SetCurve(rel, typeof(Transform), "localRotation.z", curves[5]);
-            ani.SetCurve(rel, typeof(Transform), "localRotation.w", curves[6]);
+            setCurve("localRotation.x", curves[3]);
+            setCurve("localRotation.y", curves[4]);
+            setCurve("localRotation.z", curves[5]);
+            setCurve("localRotation.w", curves[6]);
         }
 
-        ani.EnsureQuaternionContinuity();
+        if (rootMotionX != null)
+            ani.SetCurve("", typeof(Transform), "localPosition.x", rootMotionX);
+        if (rootMotionZ != null)
+            ani.SetCurve("", typeof(Transform), "localPosition.z", rootMotionZ);
 
+        ani.EnsureQuaternionContinuity();
+        
         AssetDatabase.CreateAsset(ani, path);
 
         GameObject.DestroyImmediate(go);
@@ -655,15 +725,15 @@ public class Importer : IDisposable
 
         Transform skeleton;
         if (lib.hasNodes()) // use embedded skeleton directly
-            skeleton = makeSkeleton(lib).Item1; // todo this probably should not be embedded; we want a rig?
+            skeleton = makeSkeleton(lib, false, visual).Item1; // todo this probably should not be embedded; we want a rig?
+            // todo decide whether to include root node 
         else
         {
             var skPath = findSkeleton(skeletonHint != "" ? skeletonHint : visual);
             if (skPath == "")
                 throw new Exception("Failed to find skeleton for " + visual); // this should not happen with sane files
             using (var slib = new ZMeshLib(vdfs, skPath))
-                skeleton = makeSkeleton(slib).Item1;
-
+                skeleton = makeSkeleton(slib, true, skPath).Item1;
         }
 
         bool assetCreated = false;
@@ -748,7 +818,7 @@ public class Importer : IDisposable
                 if (file == "")
                     return null;
                 using (var lib = new ZMeshLib(vdfs, file))
-                    prefab = importSkeleton(lib, visual);
+                    prefab = importSkeleton(lib, visual, true);
             }
             if (type == PrefabType.DynamicMesh) // MDL, MDM
             {
@@ -821,7 +891,7 @@ public class Importer : IDisposable
     public GameObject ImportSkeleton(string name)
     {
         using (var lib = new ZMeshLib(vdfs, name))
-            return instantiate(importSkeleton(lib, name));
+            return instantiate(importSkeleton(lib, name, true)); // todo: vary whether to include root node? make a toggle?
     }
 
     public string findSkin(string name) {
@@ -891,9 +961,9 @@ public class Importer : IDisposable
     }
 
     public void ImportAnimation(string name, string skeletonAsset)
-    {
+    {// todo add dummy root toggle
         using (var lib = new ZAni(vdfs, name))
-            /*PrefabUtility.InstantiatePrefab(*/importAnimation(lib, skeletonAsset, name);//);
+            /*PrefabUtility.InstantiatePrefab(*/importAnimation(lib, skeletonAsset, name, true);//);
     }
 
     public class ScriptData

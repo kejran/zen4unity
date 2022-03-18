@@ -34,6 +34,9 @@ namespace ZenGlue
         [DllImport("zenglue", CallingConvention = CallingConvention.Cdecl)]
         private static extern IntPtr zg_ani_next(IntPtr lib);
 
+        [DllImport("zenglue", CallingConvention = CallingConvention.Cdecl)]
+        private static extern uint zg_ani_layer(IntPtr lib);
+
         private IntPtr handle;
 
         public ZAni(VDFS archive, string name)
@@ -74,6 +77,11 @@ namespace ZenGlue
         public string next() 
         {
             return Marshal.PtrToStringAnsi(zg_ani_next(handle));
+        }
+
+        public uint layer() 
+        {
+            return zg_ani_layer(handle);
         }
 
         public void Dispose()

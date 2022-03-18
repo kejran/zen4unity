@@ -66,6 +66,7 @@ public class ImportWindow : EditorWindow
 	bool scriptImportTree;
 	bool[] scriptImportMeshes;
 	bool[] scriptImportAnis;
+	bool scriptAniMoveY = true;
 
 	bool toolMakeNpc = true;
 	int npcSkin = 0;
@@ -576,6 +577,8 @@ public class ImportWindow : EditorWindow
 		listSelectBtn(scriptImportAnis);
 
 		EditorGUILayout.EndScrollView();
+
+		scriptAniMoveY = EditorGUILayout.ToggleLeft("Relocate root to ground level", scriptAniMoveY);
 
 		if (ui.bigButton("Load Files"))
 			using (var importer = new Importer("Assets/Gothic"))
