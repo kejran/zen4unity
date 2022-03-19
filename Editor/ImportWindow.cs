@@ -584,7 +584,7 @@ public class ImportWindow : EditorWindow
 			using (var importer = new Importer("Assets/Gothic"))
 			{
 				importer.LoadArchives(vdfsPath, getSelectedArchives());
-				var skeleton = scriptData.hierarchy + ".MDH";
+				var skeleton = scriptData.hierarchy;
 				var settings = makeMeshSettings();
 
 				void tryImportSkin(string skin) {
@@ -602,9 +602,10 @@ public class ImportWindow : EditorWindow
 				for (int i = 0; i < scriptImportMeshes.Length; ++i)
 					if (scriptImportMeshes[i])
 						tryImportSkin(scriptData.registeredMeshes[i]);
+				var aniBase = Path.GetFileNameWithoutExtension(scriptData.hierarchy) + "-";
 				for (int i = 0; i < scriptImportAnis.Length; ++i)
 					if (scriptImportAnis[i])
-						importer.ImportAnimation(scriptData.hierarchy + "-" + scriptData.anims[i] + ".MAN", skeleton);
+						importer.ImportAnimation(aniBase + scriptData.anims[i] + ".MAN", skeleton);
 			}
 	}
 		

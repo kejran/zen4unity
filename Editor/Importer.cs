@@ -388,10 +388,8 @@ public class Importer : IDisposable
         
         var animationRoot = dummyRoot ? go.transform.GetChild(0) : go.transform;
 
-        Debug.Log(zani.layer());
         // iterate for all (except dummy root)
         for (uint node = 0; node < nodes.Length; ++node) {
-//            Debug.Log(nodes[node]);
             var t = skin.bones[nodes[node]];
             var rel = AnimationUtility.CalculateTransformPath(t, go.transform);
 
@@ -905,12 +903,13 @@ public class Importer : IDisposable
         return "";
     }
 
-    public string findSkeleton(string name) {
-        var n = Path.GetFileNameWithoutExtension(name);
-        var mdh = n + ".MDH";
-        var mdl = n + ".MDL";
+    public string findSkeleton(string visual) 
+    {       
+        visual = Path.GetFileNameWithoutExtension(visual);
+        var mdh = visual + ".MDH";
         if (vdfs.Exists(mdh))
             return mdh;
+        var mdl = visual + ".MDL";
         if (vdfs.Exists(mdl))
             return mdl;
         return "";
@@ -978,7 +977,7 @@ public class Importer : IDisposable
     {
         using (var zscript = new ZScript(vdfs, name)) {
             var result = new ScriptData();
-            result.hierarchy = System.IO.Path.GetFileNameWithoutExtension(name.ToUpper()); // MDH
+            result.hierarchy = findSkeleton(name);
             result.baseMesh = zscript.meshTree().ToUpper().Replace(".ASC", "");
             result.registeredMeshes = zscript.registeredMeshes().Select(x => x.ToUpper().Replace(".ASC", "")).ToArray();
             var anims = zscript.getAnis();
