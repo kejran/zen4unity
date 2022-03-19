@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace zen4unity {
 
-    class WaynetRenderer: MonoBehaviour {
+    public class WaynetRenderer: MonoBehaviour {
 
         public ZenGlue.Waynet waynet;
         public bool enablePreview;

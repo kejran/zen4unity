@@ -728,7 +728,7 @@ public class ImportWindow : EditorWindow
 
 			case LoadMode.Script:
 				scriptData = imp.ImportScript(fileSelected);
-				scriptImportTree = true;
+				scriptImportTree = false;
 				scriptImportSkeleton = false; // any mesh implies it will import anyway
 				scriptImportMeshes = scriptData.registeredMeshes.Select(x => false).ToArray();
 				scriptImportAnis = scriptData.anims.Select(x => false).ToArray();
