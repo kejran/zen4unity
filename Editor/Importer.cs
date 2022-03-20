@@ -235,6 +235,7 @@ public class Importer : IDisposable
         }).ToArray();
     }
 
+    // todo: get rid of idle hint, not necessary
     private Tuple<Transform, Transform[]> makeSkeleton(ZMeshLib lib, bool insertRoot, string idleHint) {
         var nodeInfo = lib.Nodes();
         var nodes = nodeInfo.asTree;
@@ -254,25 +255,27 @@ public class Importer : IDisposable
         var newParent = insertRoot ? new GameObject().transform : null;
         var res = iterNodes(newParent, arr, nodes);
         
-        if (insertRoot && idleHint != "")
-        {
-            var file = findIdleAnim(idleHint);
-            if (file != "") 
-                using (var ani = new ZAni(vdfs, file))
-                {
-                    var indices = ani.nodeIndices();
-                    uint root = 0xffff;
-                    for (uint i = 0; i < indices.Length; ++i)
-                        if (indices[i] == 0)
-                            root = i;
-                    if (root != 0xffff)
-                    {
-                        var pose = ani.packedSamples()[root];
-                        res[0].position = pose.position; 
-                        // todo: maybe add rotation? probably not useful
-                    }
-                }
-        }
+        // if (insertRoot && idleHint != "")
+        // {
+        //     var file = findIdleAnim(idleHint);
+        //     if (file != "") 
+        //         using (var ani = new ZAni(vdfs, file))
+        //         {
+        //             var indices = ani.nodeIndices();
+        //             uint root = 0xffff;
+        //             for (uint i = 0; i < indices.Length; ++i)
+        //                 if (indices[i] == 0)
+        //                     root = i;
+        //             if (root != 0xffff)
+        //             {
+        //                 var pose = ani.packedSamples()[root];
+        //                 res[0].position = pose.position; 
+        //                 // todo: maybe add rotation? probably not useful
+        //             }
+        //         }
+        // }
+
+        res[0].position = lib.RootTransform().toUnityAbsolute();
 
         return Tuple.Create(newParent != null ? newParent : res[0], arr);
     }

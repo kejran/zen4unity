@@ -43,6 +43,8 @@ namespace ZenGlue
         [DllImport("zenglue", CallingConvention = CallingConvention.Cdecl)]
         private static extern ref mat4x4 zg_meshlib_node_transform_get(IntPtr lib, uint index);
 
+        [DllImport("zenglue", CallingConvention = CallingConvention.Cdecl)]
+        private static extern void zg_meshlib_root_transform(IntPtr lib, ref float3 pos);
 
         [DllImport("zenglue", CallingConvention = CallingConvention.Cdecl)]
         private static extern IntPtr zg_skinnedmesh_init(IntPtr lib);
@@ -125,7 +127,15 @@ namespace ZenGlue
             return result;
         }
 
-        public ZSkinnedMesh SkinnedMesh() {
+        public float3 RootTransform() 
+        {
+            var result = new float3();
+            zg_meshlib_root_transform(handle, ref result);
+            return result;
+        }
+
+        public ZSkinnedMesh SkinnedMesh() 
+        {
             return new ZSkinnedMesh(zg_skinnedmesh_init(handle));
         }
 
