@@ -41,7 +41,7 @@ public class Importer : IDisposable
     public void LoadArchives(string basePath, string[] archives)
     {
         foreach (var f in archives)
-            vdfs.LoadArchive(pathJoin(basePath, f));
+            vdfs.LoadArchive(f);
 
         vdfs.FinalizeLoad();
     }

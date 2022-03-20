@@ -16,6 +16,13 @@ public class ImportWindow : EditorWindow
 		Script
 	}
 
+	public enum ArchiveMode 
+	{
+		Selected,
+		FullVanilla,
+		FullWithMods
+	}
+
 	public bool genUseMaterials = true;
 	private bool genShow = true;
 	private LoadMode genLoadModeOld;
@@ -27,9 +34,9 @@ public class ImportWindow : EditorWindow
 	public string vdfsVerifiedPath = "";
 	public string[] vdfsAllArchives;
 	public bool[] vdfsLoadArchiveSelection;
-	public bool vdfsUseManualArchives = true;
 	private bool vdfsShow = true;
-	private bool vdfsShowManualArchives = true;
+	private bool vdfsShowManualArchives = false;
+	private ArchiveMode vdfsArchiveMode = ArchiveMode.FullVanilla;
 
 	public Material matBaseOpaque;
 	public Material matBaseTransparent;
@@ -133,7 +140,12 @@ public class ImportWindow : EditorWindow
 		} else
 		{
 			var dir = new DirectoryInfo(vdfsPath);
-			vdfsAllArchives = dir.GetFiles("*.vdf").Select(x => x.Name).ToArray();
+			vdfsAllArchives = dir.GetFiles("*.*", SearchOption.AllDirectories).Select(x => x.FullName)
+
+//			vdfsAllArchives = Directory.EnumerateFiles(vdfsPath, "*.*", SearchOption.AllDirectories)
+				.Select(s => s.Replace('\\', '/'))
+				.Where(s => s.ToUpper().EndsWith(".VDF") || s.ToUpper().EndsWith(".MOD"))
+				.ToArray();
 		}
 		vdfsLoadArchiveSelection = new bool[vdfsAllArchives.Length];
 	}
@@ -178,7 +190,9 @@ public class ImportWindow : EditorWindow
 
 	string[] getSelectedArchives()
 	{
-		if (!vdfsUseManualArchives)
+		if (vdfsArchiveMode == ArchiveMode.FullVanilla)
+			return vdfsAllArchives.Where(s => s.EndsWith(".VDF")).ToArray();
+		if (vdfsArchiveMode == ArchiveMode.FullWithMods)
 			return vdfsAllArchives;
 		return vdfsAllArchives.Where((a, i) => vdfsLoadArchiveSelection[i]).ToArray();
 	}
@@ -246,13 +260,11 @@ public class ImportWindow : EditorWindow
 				return;
 			}
 
-			vdfsUseManualArchives = EditorGUILayout.Popup(
-				"Archive selection",
-				vdfsUseManualArchives ? 1 : 0, new string[] { "Load All", "Load Specified"}
-			) > 0;
-			if (vdfsUseManualArchives)
+
+			vdfsArchiveMode = (ArchiveMode)EditorGUILayout.EnumPopup("Archive selection", vdfsArchiveMode);
+			if (vdfsArchiveMode == ArchiveMode.Selected)
 				vdfsShowManualArchives = EditorGUILayout.Foldout(vdfsShowManualArchives, "Loaded archives");
-			if (vdfsUseManualArchives && vdfsShowManualArchives)
+			if (vdfsArchiveMode == ArchiveMode.Selected && vdfsShowManualArchives)
 			{
 				if (vdfsAllArchives == null) reloadArchives();
 				++EditorGUI.indentLevel;
@@ -260,12 +272,12 @@ public class ImportWindow : EditorWindow
 				{
 					var t = vdfsAllArchives[i];
 					EditorGUILayout.BeginHorizontal();
-					vdfsLoadArchiveSelection[i] = EditorGUILayout.ToggleLeft(t.Substring(0, t.Length - 4).ToUpper(), vdfsLoadArchiveSelection[i]);
+					vdfsLoadArchiveSelection[i] = EditorGUILayout.ToggleLeft(t.Substring(t.LastIndexOf('/') + 1).ToUpper(), vdfsLoadArchiveSelection[i]);
 					EditorGUILayout.EndHorizontal();
 				}
 				--EditorGUI.indentLevel;
 			}
-			if (vdfsUseManualArchives && vdfsLoadArchiveSelection.Count(c => c) == 0)
+			if (vdfsArchiveMode == ArchiveMode.Selected && vdfsLoadArchiveSelection.Count(c => c) == 0)
 			{
 				EditorGUILayout.Separator();
 				EditorGUILayout.HelpBox(
