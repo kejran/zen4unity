@@ -191,7 +191,7 @@ public class ImportWindow : EditorWindow
 	string[] getSelectedArchives()
 	{
 		if (vdfsArchiveMode == ArchiveMode.FullVanilla)
-			return vdfsAllArchives.Where(s => s.EndsWith(".VDF")).ToArray();
+			return vdfsAllArchives.Where(s => s.ToUpper().EndsWith(".VDF")).ToArray();
 		if (vdfsArchiveMode == ArchiveMode.FullWithMods)
 			return vdfsAllArchives;
 		return vdfsAllArchives.Where((a, i) => vdfsLoadArchiveSelection[i]).ToArray();
@@ -583,7 +583,7 @@ public class ImportWindow : EditorWindow
 		++EditorGUI.indentLevel;
 		for (int i = 0; i < scriptData.anims.Length; ++i)
 			scriptImportAnis[i] = EditorGUILayout.ToggleLeft(
-				scriptData.anims[i], scriptImportAnis[i]);
+				scriptData.anims[i].name.ToUpper(), scriptImportAnis[i]);
 
 		--EditorGUI.indentLevel;
 		listSelectBtn(scriptImportAnis);
@@ -617,7 +617,11 @@ public class ImportWindow : EditorWindow
 				var aniBase = Path.GetFileNameWithoutExtension(scriptData.hierarchy) + "-";
 				for (int i = 0; i < scriptImportAnis.Length; ++i)
 					if (scriptImportAnis[i])
-						importer.ImportAnimation(aniBase + scriptData.anims[i] + ".MAN", skeleton);
+						importer.ImportAnimation(aniBase + scriptData.anims[i].name,
+							aniBase + scriptData.anims[i].filename + ".MAN", 
+							skeleton, 
+							scriptData.anims[i].data.dirReverse > 0,
+							scriptData.anims[i].events);
 			}
 	}
 		
@@ -732,7 +736,7 @@ public class ImportWindow : EditorWindow
 				break;
 
 			case LoadMode.Animation:
-				imp.ImportAnimation(fileSelected, fileSkeleton);
+				imp.ImportAnimation(fileSelected, fileSelected, fileSkeleton, false, null);
 				break;
 
 			case LoadMode.Morph:

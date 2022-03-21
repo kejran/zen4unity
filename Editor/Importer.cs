@@ -352,7 +352,7 @@ public class Importer : IDisposable
         return true;
     }
 
-    private void importAnimation(ZAni zani, string skeleton, string assetName, bool dummyRoot)
+    private void importAnimation(ZAni zani, string skeleton, string assetName, bool dummyRoot, bool reverse, ZScript.AniEvent[]? events)
     {
         var go = getOrMakePrefab(skeleton, PrefabType.Skeleton, new MeshLoadSettings());
         if (go == null)
@@ -372,11 +372,10 @@ public class Importer : IDisposable
         var samples = zani.packedSamples();
         float invFps = 1.0f / zani.fps();
 
-        var nextAni_ = zani.next().ToUpper();
-        var nextAniName = nextAni_.Length > 0 ? Path.GetFileNameWithoutExtension(skeleton) +
-            "-" + nextAni_ + ".MAN" : nextAni_;
-
-        // todo add looping/next dummy frame at the end
+        var nextAni = zani.next().ToUpper();
+        bool isLooping = sp[1].ToUpper().Replace(".MAN", "") == nextAni;
+        bool wrapLoop = isLooping && frames > 1;
+        Debug.Log(isLooping);
 
         if (frames == 0)
         {
@@ -420,9 +419,23 @@ public class Importer : IDisposable
                 ani.SetCurve(rel, typeof(Transform), name, curve);
             }
 
+            float totalTime = invFps * (wrapLoop ? frames : (frames - 1));
+            
+            if (isRoot && dummyRoot)
+            {
+                var first = samples[node].position;
+                var last = samples[nodes.Length * (frames - 1) + node].position;
+                var diff = first - last;
+                var delta = diff / (frames - 1);
+                Debug.Log("Initial " + first.ToString("F4"));
+                Debug.Log("Delta " + delta.ToString("F4"));
+            }
+
             for (uint s = 0; s < frames; ++s) {
                 var sample = samples[nodes.Length * s + node];
                 float time = s * invFps;
+                if (reverse)
+                    time = totalTime - time;
 
                 if ((translation0 - sample.position).sqrMagnitude > 0.001f)
                     encodeTranslation = true;
@@ -437,6 +450,36 @@ public class Importer : IDisposable
                 curves[6].AddKey(time, sample.rotation.w);
             }
 
+            if (wrapLoop)
+            {
+                var sample = samples[node]; // frame 0
+                float time = reverse ? 0 : totalTime;
+
+                var pos = sample.position;
+
+                // extrapolate root motion from last frame here
+                // initial offset seems to be arbitrary... figure out what it means
+                if (isRoot && dummyRoot)
+                {
+                    // clip is at least two frames, we can extrapolate  
+                    var ultPos = samples[nodes.Length * (frames - 1) + node].position;
+                    var penultPos = samples[nodes.Length * (frames - 2) + node].position;
+
+                    var finalPos = ultPos * 2 - penultPos;
+                    pos.x = finalPos.x;
+                    pos.z = finalPos.z;
+                }
+
+                curves[0].AddKey(time, pos.x);
+                curves[1].AddKey(time, pos.y);
+                curves[2].AddKey(time, pos.z);
+
+                curves[3].AddKey(time, sample.rotation.x);
+                curves[4].AddKey(time, sample.rotation.y);
+                curves[5].AddKey(time, sample.rotation.z);
+                curves[6].AddKey(time, sample.rotation.w);
+            }
+
             if (encodeTranslation)
             {
                 setCurve("localPosition.x", curves[0]);
@@ -444,10 +487,9 @@ public class Importer : IDisposable
                 setCurve("localPosition.z", curves[2]);
             } else
             {
-                float end = invFps * (frames - 1);
-                setCurve("localPosition.x", AnimationCurve.Constant(0, end, translation0.x));
-                setCurve("localPosition.y", AnimationCurve.Constant(0, end, translation0.y));
-                setCurve("localPosition.z", AnimationCurve.Constant(0, end, translation0.z));
+                setCurve("localPosition.x", AnimationCurve.Constant(0, totalTime, translation0.x));
+                setCurve("localPosition.y", AnimationCurve.Constant(0, totalTime, translation0.y));
+                setCurve("localPosition.z", AnimationCurve.Constant(0, totalTime, translation0.z));
             }
 
             setCurve("localRotation.x", curves[3]);
@@ -461,8 +503,34 @@ public class Importer : IDisposable
         if (rootMotionZ != null)
             ani.SetCurve("", typeof(Transform), "localPosition.z", rootMotionZ);
 
+        var settings = AnimationUtility.GetAnimationClipSettings(ani);
+        settings.loopTime = isLooping;
+        AnimationUtility.SetAnimationClipSettings(ani, settings);
         ani.EnsureQuaternionContinuity();
         
+        if (events != null)
+        {
+            var eventsList = new List<AnimationEvent>();
+            foreach (var e in events)
+            {
+                var ev = new AnimationEvent();
+                ev.time = invFps * e.frame;
+                ev.functionName = "OnAniEvent" + Enum.GetName(typeof(ZScript.EventType), e.type);
+                switch(e.type) 
+                {
+                case ZScript.EventType.Fightmode: 
+                    ev.intParameter = (int)e.fightmode;
+                    break;
+                default: 
+                    Debug.LogWarning($"Unknown animation event: {e.type}"); 
+                    break;
+                }
+                //ev.stringParameter = e.slot; // todo other parameters
+                eventsList.Add(ev);
+            }
+            AnimationUtility.SetAnimationEvents(ani, eventsList.ToArray());
+        }
+
         AssetDatabase.CreateAsset(ani, path);
 
         GameObject.DestroyImmediate(go);
@@ -962,10 +1030,10 @@ public class Importer : IDisposable
         }
     }
 
-    public void ImportAnimation(string name, string skeletonAsset)
-    {// todo add dummy root toggle
-        using (var lib = new ZAni(vdfs, name))
-            /*PrefabUtility.InstantiatePrefab(*/importAnimation(lib, skeletonAsset, name, true);//);
+    public void ImportAnimation(string name, string filename, string skeletonAsset, bool reverse, ZScript.AniEvent[]? events)
+    {// todo add dummy root toggle       
+        using (var lib = new ZAni(vdfs, filename))
+            /*PrefabUtility.InstantiatePrefab(*/importAnimation(lib, skeletonAsset, name.ToUpper(), true, reverse, events);//);
     }
 
     public class ScriptData
@@ -973,7 +1041,7 @@ public class Importer : IDisposable
         public string hierarchy = "";
         public string baseMesh = "";
         public string[] registeredMeshes = {};
-        public string[] anims = {};
+        public ZScript.Ani[] anims = {};
     }
 
     public ScriptData ImportScript(string name)
@@ -984,11 +1052,13 @@ public class Importer : IDisposable
             result.baseMesh = zscript.meshTree().ToUpper().Replace(".ASC", "");
             result.registeredMeshes = zscript.registeredMeshes().Select(x => x.ToUpper().Replace(".ASC", "")).ToArray();
             var anims = zscript.getAnis();
-            var aniascs = new HashSet<string>();
+            var aniascs = new Dictionary<string, ZScript.Ani>();
             foreach (var a in anims)
                 if (a.asc != "")
-                    aniascs.Add(System.IO.Path.GetFileNameWithoutExtension(a.name.ToUpper()));
-            result.anims = aniascs.ToArray().OrderBy(x => x.Length > 2 && x[1] == '_' ? x.Substring(2) : "_" + x).ToArray();
+                    aniascs.Add(System.IO.Path.GetFileNameWithoutExtension(a.name.ToUpper()), a);
+            result.anims = aniascs.ToArray()
+                .OrderBy(pair => pair.Key.Length > 2 && pair.Key[1] == '_' ? pair.Key.Substring(2) : "_" + pair.Key)
+                .Select(pair => pair.Value).ToArray();
             return result;
         }
     }
