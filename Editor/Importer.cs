@@ -780,7 +780,7 @@ public class Importer : IDisposable
         return result.ToArray();
     }
 
-    private GameObject importDynamic(ZMeshLib lib, MeshLoadSettings settings, string visual, string skeletonHint = "")
+    private GameObject importDynamic(ZMeshLib lib, MeshLoadSettings settings, string visual, string skeletonHint = "", bool worldMesh = false)
     {
         visual = Path.GetFileNameWithoutExtension(visual);
         var attached = lib.Attached();
@@ -826,11 +826,20 @@ public class Importer : IDisposable
 
         var go = new GameObject(visual);
         skeleton.SetParent(go.transform, false);
-
+        
+        if (worldMesh)
+        {
+            // for some reason bip has a specific offset applied (default position?) 
+            // that does not make sense when nested and placed; remove it here
+            // todo: compare what happens when we apply interactable animations
+            skeleton.position = Vector3.zero;
+        }
+        
         return packageAsPrefab(go, "Models/Dynamic", visual);
     }
 
-    private GameObject? importScriptModel(ZScript script, MeshLoadSettings settings, string visual) {
+    // todo: can we assume all placed scripts are world meshes?
+    private GameObject? importScriptModel(ZScript script, MeshLoadSettings settings, string visual, bool worldMesh) {
 
         // todo: animator controller and custom script to handle states
 
@@ -846,7 +855,7 @@ public class Importer : IDisposable
 
         GameObject go;
         using (var lib = new ZMeshLib(vdfs, skin))
-            go = instantiate(importDynamic(lib, settings, visual));
+            go = instantiate(importDynamic(lib, settings, visual, "", worldMesh));
 
         // ignore registered meshes?
         foreach (var r in script.registeredMeshes())
@@ -903,7 +912,7 @@ public class Importer : IDisposable
                 if (file == "")
                     return null;
                 using (var script = new ZScript(vdfs, file))
-                    prefab = importScriptModel(script, settings, visual);
+                    prefab = importScriptModel(script, settings, visual, true); 
             }
         }
 
