@@ -771,7 +771,7 @@ public class Importer : IDisposable
 
                 if (children.Length > 0)
                     foreach (var child in children)
-                        child.transform.SetParent(obj.transform, false);
+                        child.transform.SetParent(obj.transform, true); // seems like gothic vobs actually store world transform
 
                 if (name != "")
                     obj.name = name;
